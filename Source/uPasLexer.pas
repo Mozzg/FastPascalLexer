@@ -95,6 +95,7 @@ type
     procedure FillRunProcTable;
 
     procedure SetLexerState(const ANewState: TPasLexerState);
+    function GetCurrentToken: string;
   public
     constructor Create;
 
@@ -104,6 +105,7 @@ type
 
     property LexerState: TPasLexerState read FLexerState write SetLexerState;
     property TokenID: TTokenKind read FLexerState.CurrentToken;
+    property TokenString: string read GetCurrentToken;
   end;
 
 implementation
@@ -137,7 +139,7 @@ end;
 
 procedure TPasLexer.NullHandler;
 begin
-
+  FLexerState.CurrentToken := tkEOF;
 end;
 
 procedure TPasLexer.LFHandler;
@@ -182,7 +184,29 @@ end;
 
 procedure TPasLexer.CurlyOpenHandler;
 begin
+  if FStartPtr[FLexerState.CurrentIndex + 1] = '$' then
+    FLexerState.CurrentToken := tkCompilerDirective
+  else
+  begin
+    FLexerState.CurrentToken := tkCurlyComment;
+    FLexerState.CommentState := csCurly;
+  end;
 
+  Inc(FLexerState.CurrentIndex);
+
+  while FLexerState.CurrentIndex < FLexerState.MaxIndex do
+    case FStartPtr[FLexerState.CurrentIndex] of
+      '}':
+      begin
+        FLexerState.CommentState := csNo;
+        Inc(FLexerState.CurrentIndex);
+        Break;
+      end;
+      #10, #13:
+        Break;
+    else
+      Inc(FLexerState.CurrentIndex);
+    end;
 end;
 
 procedure TPasLexer.CurlyCloseHandler;
@@ -282,7 +306,8 @@ end;
 
 procedure TPasLexer.UnknownHandler;
 begin
-
+  Inc(FLexerState.CurrentIndex);
+  FLexerState.CurrentToken := tkUnknown;
 end;
 
 procedure TPasLexer.FillRunProcTable;
@@ -347,6 +372,14 @@ begin
   Move(ANewState, FLexerState, SizeOf(TPasLexerState));
 end;
 
+function TPasLexer.GetCurrentToken: string;
+var
+  Len: Integer;
+begin
+  Len := FLexerState.CurrentIndex - FLexerState.CurrentTokenPos;
+  SetString(Result, FStartPtr + FLexerState.CurrentTokenPos, Len);
+end;
+
 procedure TPasLexer.SetData(var ADataString: string);
 begin
   if FStartPtr <> @ADataString[1] then
@@ -361,18 +394,25 @@ procedure TPasLexer.Reset;
 begin
   FLexerState.Reset;
   if FStartPtr <> nil then
+  begin
     FLexerState.MaxIndex := FEndPtr - FStartPtr;
+    NextToken;
+  end;
 end;
 
 function TPasLexer.NextToken: Boolean;
 var
   CurChar: Char;
 begin
+  FLexerState.CurrentTokenPos := FLexerState.CurrentIndex;
+  // +++ comment state
   CurChar := FStartPtr[FLexerState.CurrentIndex];
   if CurChar <= High(FRunHandlers) then  // +++ проверить, правильно ли работает условие
     FRunHandlers[CurChar]
   else
     IdentifierHandler;
+
+  Result := FLexerState.CurrentToken <> tkEOF;
 end;
 
 end.

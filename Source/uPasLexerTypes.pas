@@ -59,7 +59,7 @@ type
     tkClass,
     tkColon,
     tkComma,
-    tkCompDirect,
+    tkCompilerDirective,
     tkConst,
     tkConstructor,
     tkContains,
