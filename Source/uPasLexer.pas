@@ -32,6 +32,7 @@ unit uPasLexer;
 interface
 
 uses
+  System.SysUtils,
   uPasLexerTypes;
 
 type
@@ -41,7 +42,7 @@ type
     CurrentIndex: Cardinal;
     MaxIndex: Cardinal;
     CurrentLine: Cardinal;
-    CurrentLinePos: Cardinal;
+    CurrentLineStartPos: Cardinal;
     CurrentToken: TTokenKind;
     CurrentTokenPos: Cardinal;
     CommentState: TCommentState;
@@ -88,7 +89,7 @@ type
     procedure AddressSymbolHandler;
     procedure SquareOpenHandler;
     procedure SquareCloseHandler;
-    procedure CaretHandler;
+    procedure PointerSymbolHandler;
     procedure SymbolHandler;
     procedure UnknownHandler;
 
@@ -117,7 +118,7 @@ begin
   CurrentIndex := 0;
   MaxIndex := 0;
   CurrentLine := 0;
-  CurrentLinePos := 0;
+  CurrentLineStartPos := 0;
   CurrentToken := tkUnknown;
   CurrentTokenPos := 0;
   CommentState := csNo;
@@ -144,17 +145,37 @@ end;
 
 procedure TPasLexer.LFHandler;
 begin
+  if FLexerState.CommentState in [csCurly, csStarParen] then
+    FLexerState.CurrentToken := tkCRLFComment
+  else
+    FLexerState.CurrentToken := tkCRLF;
 
+  Inc(FLexerState.CurrentIndex);
+  Inc(FLexerState.CurrentLine);
+  FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
 end;
 
 procedure TPasLexer.CRHandler;
 begin
+  if FLexerState.CommentState in [csCurly, csStarParen] then
+    FLexerState.CurrentToken := tkCRLFComment
+  else
+    FLexerState.CurrentToken := tkCRLF;
 
+  if FStartPtr[FLexerState.CurrentIndex + 1] = #10 then
+    Inc(FLexerState.CurrentIndex, 2)
+  else
+    Inc(FLexerState.CurrentIndex);
+  Inc(FLexerState.CurrentLine);
+  FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
 end;
 
 procedure TPasLexer.SpaceHandler;
 begin
-
+  Inc(FLexerState.CurrentIndex);
+  FLexerState.CurrentToken := tkSpace;
+  while CharInSet(FStartPtr[FLexerState.CurrentIndex], [#1..#9, #11..#12, #14..#32]) do
+    Inc(FLexerState.CurrentIndex);
 end;
 
 procedure TPasLexer.AsciiCharHandler;
@@ -164,7 +185,10 @@ end;
 
 procedure TPasLexer.HexNumberHandler;
 begin
-
+  Inc(FLexerState.CurrentIndex);
+  FLexerState.CurrentToken := tkInteger;
+  while CharInSet(FStartPtr[FLexerState.CurrentIndex], ['0'..'9', 'A'..'F', 'a'..'f']) do
+    Inc(FLexerState.CurrentIndex);
 end;
 
 procedure TPasLexer.StringHandler;
@@ -226,7 +250,8 @@ end;
 
 procedure TPasLexer.StarHandler;
 begin
-
+  Inc(FLexerState.CurrentIndex);
+  FLexerState.CurrentToken := tkStar;
 end;
 
 procedure TPasLexer.SlashHandler;
@@ -236,17 +261,20 @@ end;
 
 procedure TPasLexer.PlusHandler;
 begin
-
+  Inc(FLexerState.CurrentIndex);
+  FLexerState.CurrentToken := tkPlus;
 end;
 
 procedure TPasLexer.MinusHandler;
 begin
-
+  Inc(FLexerState.CurrentIndex);
+  FLexerState.CurrentToken := tkMinus;
 end;
 
 procedure TPasLexer.CommaHandler;
 begin
-
+  Inc(FLexerState.CurrentIndex);
+  FLexerState.CurrentToken := tkComma;
 end;
 
 procedure TPasLexer.PointHandler;
@@ -261,7 +289,8 @@ end;
 
 procedure TPasLexer.SemiColonHandler;
 begin
-
+  Inc(FLexerState.CurrentIndex);
+  FLexerState.CurrentToken := tkSemiColon;
 end;
 
 procedure TPasLexer.LowerHandler;
@@ -271,7 +300,8 @@ end;
 
 procedure TPasLexer.EqualHandler;
 begin
-
+  Inc(FLexerState.CurrentIndex);
+  FLexerState.CurrentToken := tkEqual;
 end;
 
 procedure TPasLexer.GreaterHandler;
@@ -294,14 +324,16 @@ begin
 
 end;
 
-procedure TPasLexer.CaretHandler;
+procedure TPasLexer.PointerSymbolHandler;
 begin
-
+  Inc(FLexerState.CurrentIndex);
+  FLexerState.CurrentToken := tkPointerSymbol;
 end;
 
 procedure TPasLexer.SymbolHandler;
 begin
-
+  Inc(FLexerState.CurrentIndex);
+  FLexerState.CurrentToken := tkSymbol;
 end;
 
 procedure TPasLexer.UnknownHandler;
@@ -357,7 +389,7 @@ begin
           '@': FRunHandlers[Ch] := AddressSymbolHandler;
           '[': FRunHandlers[Ch] := SquareOpenHandler;
           ']': FRunHandlers[Ch] := SquareCloseHandler;
-          '^': FRunHandlers[Ch] := CaretHandler;
+          '^': FRunHandlers[Ch] := PointerSymbolHandler;
         else
           FRunHandlers[Ch] := SymbolHandler;
         end;
