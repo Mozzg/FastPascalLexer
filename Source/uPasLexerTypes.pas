@@ -16,8 +16,8 @@
 *  Author: Pervov Evgeny                                                       *
 *  Created: 16.03.2025                                                         *
 *  Description: Various types for pascal tokenizer/lexer TPasLexer             *
-*  Version: 0.1                                                                *
-*  Last modified: 16.03.2025                                                   *
+*  Version: 0.2                                                                *
+*  Last modified: 10.05.2025                                                   *
 *  Contributor(s):                                                             *
 *    Pervov Evgeny <operationm@list.ru>                                        *
 *******************************************************************************)
@@ -25,16 +25,6 @@
 unit uPasLexerTypes;
 
 interface
-
-// +++ проверить, что для этих токенов создаются ноды в дереве
-// Abort
-// Break
-// Continue
-// Exit
-// Halt
-// RunError
-
-// +++ true/false добавить. Токены нужны, т.к. потом можно проверять отдельные условия по ним, типа пишутся ли с большой буквы
 
 type
   TTokenKind = (
@@ -80,7 +70,9 @@ type
     tkDownto,
     tkDynamic,
     tkElse,
+    tkElseIfDirective,
     tkEnd,
+    tkEndIfDirective,
     tkEOF,
     tkEqual,
     tkError,
@@ -107,6 +99,10 @@ type
     tkHelper,
     tkIdentifier,
     tkIf,
+    tkIfDefDirective,
+    tkIfEndDirective,
+    tkIfNDefDirective,
+    tkIfOptDirective,
     tkImplementation,
     tkImplements,
     tkIn,
@@ -195,6 +191,7 @@ type
     tkTry,
     tkType,
     tkUnit,
+    tkUnitEnd,
     tkUnknown,
     tkUnsafe,
     tkUntil,
@@ -214,9 +211,26 @@ type
   TCommentState = (
     csNo,
     csCurly,
-    csStarParen,
-    csSingleLine
+    csStarParen
   );
+
+  TPasLexerStateCounters = record
+    RoundCount: Integer;
+    SquareCount: Integer;
+    IfDirectiveCount: Integer;
+  end;
+
+  TIfDirectiveState = (
+    idsNone = 0,
+    idsIf = 1,
+    idsElse = 2,
+    idsElseIf = 3
+  );
+
+  TPasLexerSavedCounters = record
+    StartCounters: TPasLexerStateCounters;
+    EndCounters: TPasLexerStateCounters;
+  end;
 
   TKeywordRec = record
     Word: string;
@@ -232,9 +246,16 @@ type
 const
   PREFIX_TREE_NODE_SIZE = SizeOf(TPrefixTreeNode);
 
+  COMMENT_TOKENS: array[TCommentState] of TTokenKind = (
+    tkUnknown,
+    tkCurlyComment,
+    tkStarParenComment
+  );
   METHOD_TOKENS: TTokenKindSet = [tkProcedure, tkFunction, tkConstructor, tkDestructor, tkOperator];
+  CONDITIONAL_COMPILER_TOKENS: TTokenKindSet = [tkIfDefDirective, tkIfNDefDirective, tkIfOptDirective, tkElseIfDirective,
+      tkEndIfDirective, tkIfEndDirective];
 
-  DELPHI_KEYWORDS: array[0..128] of TKeywordRec = (
+  DELPHI_KEYWORDS: array[0..134] of TKeywordRec = (
     (Word: 'and';            Token: tkAnd), // reserve words start
     (Word: 'array';          Token: tkArray),
     (Word: 'as';             Token: tkAs),
@@ -356,6 +377,12 @@ const
     (Word: 'winapi';         Token: tkWinapi),
     (Word: 'write';          Token: tkWrite),
     (Word: 'writeonly';      Token: tkWriteonly), // directives end
+    (Word: 'ifdef';          Token: tkIfDefDirective), // compiler directives start
+    (Word: 'ifndef';         Token: tkIfNDefDirective),
+    (Word: 'ifopt';          Token: tkIfOptDirective),
+    (Word: 'elseif';         Token: tkElseIfDirective),
+    (Word: 'endif';          Token: tkEndIfDirective),
+    (Word: 'ifend';          Token: tkIfEndDirective), // compiler directives end
     (Word: 'abort';          Token: tkAbort), // others start
     (Word: 'break';          Token: tkBreak),
     (Word: 'continue';       Token: tkContinue),

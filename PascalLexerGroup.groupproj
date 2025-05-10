@@ -1,0 +1,48 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{413175C6-6289-4F18-9026-B4DC1A52743A}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="TestApp\TestApp.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="UnitTests\PasLexerTests.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="TestApp">
+        <MSBuild Projects="TestApp\TestApp.dproj"/>
+    </Target>
+    <Target Name="TestApp:Clean">
+        <MSBuild Projects="TestApp\TestApp.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="TestApp:Make">
+        <MSBuild Projects="TestApp\TestApp.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="PasLexerTests">
+        <MSBuild Projects="UnitTests\PasLexerTests.dproj"/>
+    </Target>
+    <Target Name="PasLexerTests:Clean">
+        <MSBuild Projects="UnitTests\PasLexerTests.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="PasLexerTests:Make">
+        <MSBuild Projects="UnitTests\PasLexerTests.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="TestApp;PasLexerTests"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="TestApp:Clean;PasLexerTests:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="TestApp:Make;PasLexerTests:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>
