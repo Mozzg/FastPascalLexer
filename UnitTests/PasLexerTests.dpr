@@ -20,6 +20,7 @@ uses
   uPasLexerTypes in '..\Source\uPasLexerTypes.pas',
   uPasParser in '..\Source\uPasParser.pas',
   TestuPasLexer in 'TestuPasLexer.pas',
+  TestuPasLexerAdditional in 'TestuPasLexerAdditional.pas',
   uPasExceptions in '..\Source\uPasExceptions.pas';
 
 {$R *.RES}
