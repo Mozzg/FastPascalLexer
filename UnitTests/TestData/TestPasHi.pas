@@ -1,4 +1,4 @@
-раз{
+{
  * Test.pas
  *
  * PasHi test file. Used to check PasHi output.
@@ -6,7 +6,7 @@
  * DO NOT COMPILE THIS FILE.
 }
 
-unit Test;
+unit TestPasHi;
 
 {$MESSAGE FATAL 'Unit to test syntax highlighter - do not compile'}
 

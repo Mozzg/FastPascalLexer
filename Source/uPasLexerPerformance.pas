@@ -172,7 +172,6 @@ end;
 
 function THighResolutionStopwatch.GetElapsedNanoseconds: Int64;
 begin
-  // +++ проверить, что правильно считает, что-то было минусовое значение
   Result := Floor(GetElapsedTicks * fInverseTicksPerNanosecond);
 end;
 

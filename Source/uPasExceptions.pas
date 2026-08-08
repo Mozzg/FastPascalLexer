@@ -28,7 +28,7 @@ interface
 
 uses
   System.SysUtils,
-  uPasLexer, uPasLexerTypes, uPasParser;
+  uPasLexer, uPasLexerTypes, uPasParser, uPasParserGrammar;
 
 type
   EPasBaseException = class(Exception);
@@ -49,8 +49,20 @@ type
 
   EPasParserException = class(EPasBaseException)
   public
-    constructor Create(const AMessage: string; ALexer: TPasParser = nil);
+    constructor Create(const AMessage: string; AParser: TPasParser = nil);
+    constructor CreateFmt(const Msg: string; const Args: array of const; AParser: TPasParser = nil);
   end;
+
+  EPasGrammarParserException = class(EPasLexerException)
+  protected
+    constructor Create(const AMessage: string; ALexer: TPasLexer = nil); overload; deprecated 'don''t use this constructor';
+    constructor CreateFmt(const Msg: string; const Args: array of const; ALexer: TPasLexer = nil); overload; deprecated 'don''t use this constructor';
+  public
+    constructor Create(const AMessage: string; ALexeme: TBaseLexemeNode = nil); overload;
+    constructor CreateFmt(const Msg: string; const Args: array of const; ALexeme: TBaseLexemeNode = nil); overload;
+  end;
+
+function GetTokenSetStringForOR(ATokenSet: TTokenKindSet): string;
 
 resourcestring
   EMESSAGE_TIMER_NOT_AVAILABLE = 'Error creating %s, high resolution timer is not available';
@@ -62,14 +74,36 @@ resourcestring
   EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE = 'Lexer counters mismatch at ELSE or ELSEIF directive';
   EMESSAGE_DIRECTIVE_COUNTERS_NOTFOUND_ON_RESTORE = 'Could not find saved counters data to restore at ELSE or ELSEIF directive';
 
+  EMESSAGE_GET_INDEX_OUT_OF_RANGE = 'Requested index out of range (%d)';
+
+  EMESSAGE_GRAMMAR_UNEXPECTED_ENDOFBLOCK = 'Unexpected end of block (%s)';
+  EMESSAGE_GRAMMAR_UNEXPECTED_TOKEN = 'Unexpected token, expected %s, got %s';
+
 implementation
+
+{ }
+
+function GetTokenSetStringForOR(ATokenSet: TTokenKindSet): string;
+const
+  OR_BOOL_ARRAY: array [False .. True] of string = ('|', '');
+var
+  Token: TTokenKind;
+begin
+  Result := EmptyStr;
+  for Token in ATokenSet do
+    Result := Result + OR_BOOL_ARRAY[Result = EmptyStr] + TOKEN_NAMES[Token];
+  Result := '[' + Result + ']';
+end;
 
 { EPasLexerException }
 
 constructor EPasLexerException.Create(const AMessage: string; ALexer: TPasLexer = nil);
 begin
   if not Assigned(ALexer) then
-    FCurrentToken := tkUnknown
+  begin
+    if (FLineNumber = 0) and (FLineCharIndex = 0) then
+      FCurrentToken := tkUnknown;
+  end
   else
   begin
     FLineNumber := ALexer.LexerState.CurrentLine;
@@ -87,9 +121,43 @@ end;
 
 { EPasParserException }
 
-constructor EPasParserException.Create(const AMessage: string; ALexer: TPasParser = nil);
+constructor EPasParserException.Create(const AMessage: string; AParser: TPasParser = nil);
 begin
+  inherited Create(AMessage);
+end;
 
+constructor EPasParserException.CreateFmt(const Msg: string; const Args: array of const; AParser: TPasParser = nil);
+begin
+  Create(Format(Msg, Args), AParser);
+end;
+
+{ EPasGrammarParserException }
+
+constructor EPasGrammarParserException.Create(const AMessage: string; ALexer: TPasLexer = nil);
+begin
+  inherited Create(AMessage, ALexer);
+end;
+
+constructor EPasGrammarParserException.CreateFmt(const Msg: string; const Args: array of const; ALexer: TPasLexer = nil);
+begin
+  inherited CreateFmt(Msg, Args, ALexer);
+end;
+
+constructor EPasGrammarParserException.Create(const AMessage: string; ALexeme: TBaseLexemeNode = nil);
+begin
+  if Assigned(ALexeme) then
+  begin
+    FLineNumber := ALexeme.StatesCurrentIndexLineNumber;
+    FLineCharIndex := ALexeme.StatesCurrentIndexLineCharIndex;
+    FCurrentToken := ALexeme.StatesCurrentIndexToken;
+  end;
+
+  inherited Create(AMessage);
+end;
+
+constructor EPasGrammarParserException.CreateFmt(const Msg: string; const Args: array of const; ALexeme: TBaseLexemeNode = nil);
+begin
+  Create(Format(Msg, Args), ALexeme);
 end;
 
 end.

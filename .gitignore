@@ -80,5 +80,7 @@ __recovery/
 # Boss dependency manager vendor folder https://github.com/HashLoad/boss
 modules/
 /Exe
-/TestApp
 UnitTests/TestData/VirtualTrees.pas
+UnitTests/TestData/VirtualTrees_cleared.pas
+links.txt
+/Source/ThirdParty/FastMM5

@@ -54,6 +54,7 @@ type
     IsProperty: Boolean;
     IsCompilerDirective: Boolean;
     IgnoreCompilerDirectiveChecks: Boolean;
+    WasLineChange: Boolean;
     IfDirectiveStateArray: TArray<TIfDirectiveState>;
     IfDirectiveSavedCountersArray: TArray<TPasLexerSavedCounters>;
 
@@ -111,8 +112,6 @@ type
 
     function GetIdentifierKindWithTree: TTokenKind;
     procedure SkipToIdentifierEnd(var ACurrentPtr: PChar);
-
-    //function TestNextTokenSequence(const AExpectedTokens: array of TTokenKind): Boolean;
 
     procedure RaiseCompilerDirectiveException(const AMessage: string);
 
@@ -258,9 +257,10 @@ begin
   else
     FLexerState.CurrentToken := tkCRLF;
 
+  //FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
   Inc(FLexerState.CurrentIndex);
-  Inc(FLexerState.CurrentLine);
-  FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
+  //Inc(FLexerState.CurrentLine);
+  FLexerState.WasLineChange := True;
 end;
 
 procedure TPasLexer.CRHandler;
@@ -270,12 +270,13 @@ begin
   else
     FLexerState.CurrentToken := tkCRLF;
 
+  //FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
   if FStartPtr[FLexerState.CurrentIndex + 1] = #10 then
     Inc(FLexerState.CurrentIndex, 2)
   else
     Inc(FLexerState.CurrentIndex);
-  Inc(FLexerState.CurrentLine);
-  FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
+  //Inc(FLexerState.CurrentLine);
+  FLexerState.WasLineChange := True;
 end;
 
 procedure TPasLexer.SpaceHandler;
@@ -554,21 +555,23 @@ begin
       #10:
         if FLexerState.CurrentToken = tkCompilerDirective then
         begin
+          //FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
           Inc(FLexerState.CurrentIndex);
-          Inc(FLexerState.CurrentLine);
-          FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
+          //Inc(FLexerState.CurrentLine);
+          FLexerState.WasLineChange := True;
         end
         else
           Break;
       #13:
         if FLexerState.CurrentToken = tkCompilerDirective then
         begin
+          //FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
           if FStartPtr[FLexerState.CurrentIndex + 1] = #10 then
             Inc(FLexerState.CurrentIndex, 2)
           else
             Inc(FLexerState.CurrentIndex);
-          Inc(FLexerState.CurrentLine);
-          FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
+          //Inc(FLexerState.CurrentLine);
+          FLexerState.WasLineChange := True;
         end
         else
           Break;
@@ -851,9 +854,6 @@ begin
   end
   else if Assigned(CurrentNode) then
     Result := CurrentNode^.CurrentTokenKind
-  // +++ посмотреть это условие, поидее можно убрать но надо проверять
-  //else if (not FLexerState.IsCompilerDirective) and (FLexerState.CurrentToken in CONDITIONAL_COMPILER_TOKENS) then
-  //  Result := tkIdentifier
   else
     Result := tkIdentifier;
 
@@ -865,20 +865,6 @@ begin
   while CharInSet(ACurrentPtr^, ['a'..'z', 'A'..'Z']) do
     Inc(ACurrentPtr);
 end;
-
-{function TPasLexer.TestNextTokenSequence(const AExpectedTokens: array of TTokenKind): Boolean;
-var
-  i: Integer;
-begin
-  Result := True;
-
-  for i := Low(AExpectedTokens) to High(AExpectedTokens) do
-  begin
-    NextTokenNoJunk;
-    if FLexerState.CurrentToken <> AExpectedTokens[i] then
-      Exit(False);
-  end;
-end;}
 
 procedure TPasLexer.RaiseCompilerDirectiveException(const AMessage: string);
 begin
@@ -1013,6 +999,7 @@ var
 begin
   if not Assigned(ANode) then Exit;
 
+  // +++ проверить, нужно ли условие с Assigned ниже
   for i := Low(ANode^.NextCharPointers) to High(ANode^.NextCharPointers) do
     if Assigned(ANode^.NextCharPointers[i]) then
       FreePrefixTree(ANode^.NextCharPointers[i]);
@@ -1054,10 +1041,16 @@ function TPasLexer.NextToken: Boolean;
 var
   CurChar: Char;
 begin
-  if not(FLexerState.CurrentToken in [tkCurlyComment, tkSingleLineComment, tkStarParenComment, tkCompilerDirective, tkCRLF, tkCRLFComment, tkSpace]) then
+  if not(FLexerState.CurrentToken in DIRECTIVE_UNSIGNIFICANT_TOKENS) then
   begin
     FLexerState.LastSignificantToken := FLexerState.CurrentToken;
     FLexerState.LastSignificantTokenPos := FLexerState.CurrentTokenPos;
+  end;
+  if FLexerState.WasLineChange then
+  begin
+    FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
+    Inc(FLexerState.CurrentLine);
+    FLexerState.WasLineChange := False;
   end;
 
   FLexerState.CurrentTokenPos := FLexerState.CurrentIndex;
