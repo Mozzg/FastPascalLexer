@@ -210,19 +210,22 @@ begin
     case FStartPtr[FLexerState.CurrentIndex] of
       #0:
       begin
-        if FLexerState.CurrentTokenPos <> FLexerState.CurrentIndex then Exit;
+        if FLexerState.CurrentTokenPos <> FLexerState.CurrentIndex then
+          Exit;
         NullHandler;
         Break;
       end;
       #10:
       begin
-        if FLexerState.CurrentTokenPos <> FLexerState.CurrentIndex then Exit;
+        if FLexerState.CurrentTokenPos <> FLexerState.CurrentIndex then
+          Exit;
         LFHandler;
         Break;
       end;
       #13:
       begin
-        if FLexerState.CurrentTokenPos <> FLexerState.CurrentIndex then Exit;
+        if FLexerState.CurrentTokenPos <> FLexerState.CurrentIndex then
+          Exit;
         CRHandler;
         Break;
       end;
@@ -257,9 +260,7 @@ begin
   else
     FLexerState.CurrentToken := tkCRLF;
 
-  //FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
   Inc(FLexerState.CurrentIndex);
-  //Inc(FLexerState.CurrentLine);
   FLexerState.WasLineChange := True;
 end;
 
@@ -270,12 +271,10 @@ begin
   else
     FLexerState.CurrentToken := tkCRLF;
 
-  //FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
   if FStartPtr[FLexerState.CurrentIndex + 1] = #10 then
     Inc(FLexerState.CurrentIndex, 2)
   else
     Inc(FLexerState.CurrentIndex);
-  //Inc(FLexerState.CurrentLine);
   FLexerState.WasLineChange := True;
 end;
 
@@ -439,7 +438,9 @@ begin
             for i := High(FLexerState.IfDirectiveStateArray) downto Low(FLexerState.IfDirectiveStateArray) do
               if FLexerState.IfDirectiveStateArray[i] = idsIf then
               begin
-                if not CompareMem(@FLexerState.Counters, @FLexerState.IfDirectiveSavedCountersArray[i].EndCounters, SizeOf(TPasLexerStateCounters)) then
+                if not CompareMem(@FLexerState.Counters,
+                    @FLexerState.IfDirectiveSavedCountersArray[i].EndCounters, SizeOf(TPasLexerStateCounters))
+                then
                   RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
                 Break;
               end;
@@ -484,7 +485,6 @@ begin
       end;
       tkEndIfDirective, tkIfEndDirective:
       begin
-        //FLexerState.ElseDirectiveCount := FLexerState.IfDirectiveCount;
         DirectiveStateLength := Length(FLexerState.IfDirectiveStateArray);
         DirectiveCountersLength := Length(FLexerState.IfDirectiveSavedCountersArray);
 
@@ -526,7 +526,9 @@ begin
             RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_NOTFOUND_ON_RESTORE);
 
           // Compare counters
-          if not CompareMem(@FLexerState.Counters, @FLexerState.IfDirectiveSavedCountersArray[j].EndCounters, SizeOf(TPasLexerStateCounters)) then
+          if not CompareMem(@FLexerState.Counters,
+              @FLexerState.IfDirectiveSavedCountersArray[j].EndCounters, SizeOf(TPasLexerStateCounters))
+          then
             RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
           // Decrease arrays
           SetLength(FLexerState.IfDirectiveStateArray, j);
@@ -538,7 +540,9 @@ begin
         Dec(FLexerState.Counters.IfDirectiveCount);
 
         // Compare directive counter and array length, they must be equal at end directive
-        if (FLexerState.Counters.IfDirectiveCount <> DirectiveStateLength) or (FLexerState.Counters.IfDirectiveCount <> DirectiveCountersLength) then
+        if (FLexerState.Counters.IfDirectiveCount <> DirectiveStateLength)
+            or (FLexerState.Counters.IfDirectiveCount <> DirectiveCountersLength)
+        then
           RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH);
       end;
     end;
@@ -555,9 +559,7 @@ begin
       #10:
         if FLexerState.CurrentToken = tkCompilerDirective then
         begin
-          //FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
           Inc(FLexerState.CurrentIndex);
-          //Inc(FLexerState.CurrentLine);
           FLexerState.WasLineChange := True;
         end
         else
@@ -565,12 +567,10 @@ begin
       #13:
         if FLexerState.CurrentToken = tkCompilerDirective then
         begin
-          //FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
           if FStartPtr[FLexerState.CurrentIndex + 1] = #10 then
             Inc(FLexerState.CurrentIndex, 2)
           else
             Inc(FLexerState.CurrentIndex);
-          //Inc(FLexerState.CurrentLine);
           FLexerState.WasLineChange := True;
         end
         else
@@ -947,6 +947,8 @@ begin
 end;
 
 class procedure TPasLexer.InitCharHashTable;
+const
+  HASH_OFFSET = 64;
 var
   Ch: Char;
 begin
@@ -954,8 +956,8 @@ begin
   begin
     // Hash for lowercase converted to uppercase
     case Ch of
-      'a'..'z': FCharHashTable[Ch] := (Word(Ch) xor $0020) - 64;
-      'A'..'Z', '_': FCharHashTable[Ch] := Ord(Ch) - 64;
+      'a'..'z': FCharHashTable[Ch] := (Word(Ch) xor $0020) - HASH_OFFSET;
+      'A'..'Z', '_': FCharHashTable[Ch] := Ord(Ch) - HASH_OFFSET;
     else
       FCharHashTable[Ch] := 0;
     end;
@@ -1041,7 +1043,7 @@ function TPasLexer.NextToken: Boolean;
 var
   CurChar: Char;
 begin
-  if not(FLexerState.CurrentToken in DIRECTIVE_UNSIGNIFICANT_TOKENS) then
+  if not (FLexerState.CurrentToken in DIRECTIVE_UNSIGNIFICANT_TOKENS) then
   begin
     FLexerState.LastSignificantToken := FLexerState.CurrentToken;
     FLexerState.LastSignificantTokenPos := FLexerState.CurrentTokenPos;
@@ -1075,7 +1077,7 @@ function TPasLexer.NextTokenNoJunk: Boolean;
 begin
   repeat
     Result := NextToken;
-  until Result and not(FLexerState.CurrentToken in [tkSingleLineComment, tkCurlyComment, tkStarParenComment, tkCompilerDirective,
+  until Result and not (FLexerState.CurrentToken in [tkSingleLineComment, tkCurlyComment, tkStarParenComment, tkCompilerDirective,
       tkCRLF, tkCRLFComment, tkSpace]);
 end;
 
@@ -1095,7 +1097,8 @@ begin
     Result := NextTokenNoJunk;
     SameDirectiveLevel := ((SavedDirectiveLength = 0) and (Length(FLexerState.IfDirectiveStateArray) = 0))
         or ((SavedDirectiveLength > 0) and ((Length(FLexerState.IfDirectiveStateArray) < SavedDirectiveLength)
-        or ((Length(FLexerState.IfDirectiveStateArray) = SavedDirectiveLength) and (FLexerState.IfDirectiveStateArray[High(FLexerState.IfDirectiveStateArray)] = SavedDirectiveState))));
+        or ((Length(FLexerState.IfDirectiveStateArray) = SavedDirectiveLength)
+        and (FLexerState.IfDirectiveStateArray[High(FLexerState.IfDirectiveStateArray)] = SavedDirectiveState))));
   until Result and SameDirectiveLevel;
 end;
 
