@@ -49,7 +49,7 @@
         <DCC_K>false</DCC_K>
         <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;Vcl;Vcl.Imaging;Vcl.Touch;Vcl.Samples;Vcl.Shell;$(DCC_Namespace)</DCC_Namespace>
         <DCC_UnitSearchPath>$(BDS)\Source\DUnit\src;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
-        <DCC_Define>_CONSOLE_TESTRUNNER;$(DCC_Define)</DCC_Define>
+        <DCC_Define>CONSOLE_TESTRUNNER;$(DCC_Define)</DCC_Define>
         <VerInfo_Locale>1049</VerInfo_Locale>
         <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
         <SanitizedProjectName>PasLexerTests</SanitizedProjectName>
@@ -94,7 +94,10 @@
         <DCCReference Include="..\Source\uPasLexerTypes.pas"/>
         <DCCReference Include="..\Source\uPasParser.pas"/>
         <DCCReference Include="TestuPasLexer.pas"/>
+        <DCCReference Include="TestuPasLexerAdditional.pas"/>
         <DCCReference Include="..\Source\uPasExceptions.pas"/>
+        <DCCReference Include="..\Source\uPasParserTypes.pas"/>
+        <DCCReference Include="..\Source\uPasParserGrammar.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
