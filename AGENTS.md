@@ -29,7 +29,7 @@ Repository layout:
 - **UpperCamelCase** for every other construct: each word capitalized, never `_`-separated (`SetNumber`, `ConvertFile`). Exception: constants and names borrowed from external libraries/APIs keep their original style: `STATUS_INVALID_HANDLE = DWORD($C0000008);`.
 - **No identifiers matching reserved or IDE-highlighted keywords.**
 - **No digits in method names.** Write `PngToBmp`, not `PNG2BMP`; never `Calculate2` — pick a name that states the difference (`CalculateInKilometers` vs `CalculateInMiles`).
-- **Method names** follow the template `<verb><adjective><noun>` with the verb always present; a grouping prefix is allowed: `UpdateReturnActsStatus`, `ClsFind`, `ClsListMaxNo`, `ClsPrepareFilter`.
+- **Method names** should follow the template `<verb><adjective><noun>` but there can be exceptions; a grouping prefix is allowed: `UpdateReturnActsStatus`, `ClsFind`, `ClsListMaxNo`, `ClsPrepareFilter`.
 - **Types/classes prefixed `T`, pointers to them prefixed `P`**: `TObjectArray = array [0..$EFFFFFF] of TObject;` and `PObjectArray = ^TObjectArray;`.
 - **Enum elements** carry a prefix taken from the first letters of two or three words of the type name (four or more letters discouraged), lowercase, unique within the module: `TValueType = (vtVariant, vtAnsiString, vtUnicodeString, vtInteger, vtInt64);`.
 - **Fields** in `private`/`protected` sections are prefixed `F`; the property exposing the field drops it.
