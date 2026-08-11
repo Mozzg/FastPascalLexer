@@ -94,7 +94,10 @@
         <DCCReference Include="..\Source\uPasLexerTypes.pas"/>
         <DCCReference Include="..\Source\uPasParser.pas"/>
         <DCCReference Include="TestuPasLexer.pas"/>
+        <DCCReference Include="TestuPasLexerAdditional.pas"/>
         <DCCReference Include="..\Source\uPasExceptions.pas"/>
+        <DCCReference Include="..\Source\uPasParserTypes.pas"/>
+        <DCCReference Include="..\Source\uPasParserGrammar.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

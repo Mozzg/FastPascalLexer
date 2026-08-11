@@ -21,7 +21,9 @@ uses
   uPasParser in '..\Source\uPasParser.pas',
   TestuPasLexer in 'TestuPasLexer.pas',
   TestuPasLexerAdditional in 'TestuPasLexerAdditional.pas',
-  uPasExceptions in '..\Source\uPasExceptions.pas';
+  uPasExceptions in '..\Source\uPasExceptions.pas',
+  uPasParserTypes in '..\Source\uPasParserTypes.pas',
+  uPasParserGrammar in '..\Source\uPasParserGrammar.pas';
 
 {$R *.RES}
 
