@@ -355,10 +355,14 @@ begin
     FRootLexemeNode.ParseItself;
   except
     on E: Exception do
+    begin
       FreeAndNil(FRootLexemeNode);
-    on E: EPasGrammarParserException do
-      raise Exception.CreateFmt(E.Message + '(Line: %d; Pos: %d; Token: %s)', [E.LineNumber, E.LineCharIndex,
-          TOKEN_NAMES[E.CurrentToken]]);
+      if E is EPasGrammarParserException then
+        raise Exception.CreateFmt(E.Message + '(Line: %d; Pos: %d; Token: %s)', [EPasGrammarParserException(E).LineNumber,
+            EPasGrammarParserException(E).LineCharIndex, TOKEN_NAMES[EPasGrammarParserException(E).CurrentToken]])
+      else
+        raise;
+    end;
   end;
 end;
 

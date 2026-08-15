@@ -241,10 +241,13 @@ Available group targets: `Build`, `Clean`, `Make`, plus per-project
 
 ### Individual projects
 
-- **Unit tests (console):** `UnitTests\PasLexerTests.dproj`
-  `AppType=Console`; the `.dproj` defines `CONSOLE_TESTRUNNER`, which makes
-  `PasLexerTests.dpr` compile as a console app and DUnit emit text output.
-  Build with `Config=Debug|Release`, `Platform=Win32` (or `Win64`).
+- **Unit tests:** `UnitTests\PasLexerTests.dproj` has three configurations.
+  `Debug` and `Release` build the visual DUnit GUI test runner window — use
+  them for interactive runs in the IDE. The `Console` configuration (based
+  on `Debug`) defines `CONSOLE_TESTRUNNER`, which makes `PasLexerTests.dpr`
+  compile as a console app and DUnit print text output — use it for
+  automated runs (agents, CI, build scripts).
+  Build with `Config=Debug|Release|Console`, `Platform=Win32` (or `Win64`).
   Known compiler warnings (W1036 in `uPasParserGrammar.pas`) are pre-existing
   and not errors.
 - **GUI test app:** `TestApp\TestApp.dproj` (VCL `AppType=Application`,
@@ -255,6 +258,8 @@ Available group targets: `Build`, `Clean`, `Make`, plus per-project
 
 ### Run the tests
 
+Console mode (automation; build with `Config=Console`, then run):
+
 ```powershell
 & "C:\GitHub Repos\FastPascalLexer\Exe\PasLexerTests.exe"
 ```
@@ -263,6 +268,18 @@ Expect a trailing line like `OK: 31 tests` (test count grows with the suite).
 The console runner prints per-test progress dots and the failure/error summary;
 nonzero output means a failing suite. `TestData/` files are read relative to
 the repo layout at runtime — run from the repository root.
+
+GUI mode (interactive; build with `Config=Debug|Release`, then run the same
+`Exe\PasLexerTests.exe`):
+
+```powershell
+& "C:\GitHub Repos\FastPascalLexer\Exe\PasLexerTests.exe"
+```
+
+The DUnit window shows the test tree, runs the suite with a click, and reports
+failures visually. Both configurations write the same `Exe\PasLexerTests.exe`,
+so the last built configuration wins: build the configuration you intend to
+run right before running it.
 
 ### After a build
 

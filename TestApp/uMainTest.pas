@@ -28,6 +28,7 @@ type
     Button8: TButton;
     Button9: TButton;
     Button10: TButton;
+    Button11: TButton;
     procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
@@ -39,6 +40,7 @@ type
     procedure Button8Click(Sender: TObject);
     procedure Button9Click(Sender: TObject);
     procedure Button10Click(Sender: TObject);
+    procedure Button11Click(Sender: TObject);
   private type
     TMyClass122 = class( tobject)
       FField: Integer;
@@ -148,13 +150,14 @@ var
   HRTimer: THighResolutionStopwatch;
   i: Integer;
   Elapsed: Int64;
-  f: Double;
+  //f: Double;
 begin
   Lexer := TPasLexer.Create;
   try
     HRTimer := THighResolutionStopwatch.Create;
     try
-      FileContent := 'unit test2; 1e-33.4 1.5.6 123e';
+      //FileContent := 'unit test2; 1e-33.4 1.5.6 123e';
+      FileContent := ' ''abc'''' ';
 
       try
         Memo1.Lines.BeginUpdate;
@@ -213,6 +216,21 @@ begin
     end;
   finally
     Lexer.Free;
+  end;
+
+  Log('DONE');
+end;
+
+procedure TfmMainTest.Button11Click(Sender: TObject);
+begin
+  try
+    raise EPasLexerException.Create('Test message', nil);
+  except
+    on E: Exception do
+      Log('Exception: ' + E.Message);
+    on E: EPasLexerException do
+      Log('EPasLexerException: ' + E.Message);
+
   end;
 
   Log('DONE');
@@ -603,7 +621,7 @@ var
   //i: Integer;
   CurState: TPasLexerMinimalState;
   Elapsed: Int64;
-  CurError: TParseErrorItem;
+  //CurError: TParseErrorItem;
   //FileStream: TFileStream;
   Root: TBaseLexemeNode;
 begin

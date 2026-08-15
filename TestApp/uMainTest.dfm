@@ -138,4 +138,13 @@ object fmMainTest: TfmMainTest
     TabOrder = 10
     OnClick = Button10Click
   end
+  object Button11: TButton
+    Left = 175
+    Top = 344
+    Width = 75
+    Height = 25
+    Caption = 'Button11'
+    TabOrder = 11
+    OnClick = Button11Click
+  end
 end
