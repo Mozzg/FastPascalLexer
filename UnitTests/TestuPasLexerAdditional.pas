@@ -52,6 +52,7 @@ type
     procedure TestLexerStateSnapshot;
     procedure TestLineTracking;
     procedure TestEOFBehavior;
+    procedure TestSetDataEmptyString;
     procedure TestNextTokenNoJunk;
     procedure TestNextTokenWithKind;
     procedure TestNextTokenNoDirectiveBranching;
@@ -341,6 +342,16 @@ begin
     'tkInteger;tkSpace;tkNumber',
     TokenNames('0 1.5 1.5e3 1E-2 10.25E+8 $AB 42'),
     'Number, float, exponent and hex literals');
+  CheckEquals('tkNumber;tkIdentifier;tkMinus', TokenNames('1e-'),
+    'Exponent without digits is not a float');
+  CheckEquals('tkNumber;tkIdentifier;tkPlus', TokenNames('1e+'),
+    'Exponent sign without digits is not a float');
+  CheckEquals('tkFloat;tkIdentifier;tkMinus', TokenNames('1.5e-'),
+    'Exponent without digits after a point keeps the float');
+  CheckEquals('tkFloat;tkPoint;tkNumber', TokenNames('1e33.3'),
+    'A dot after the exponent is not part of the number');
+  CheckEquals('tkFloat;tkPoint;tkNumber', TokenNames('1.5e+3.2'),
+    'A dot after a signed exponent is not part of the number');
 end;
 
 procedure TestTPasLexerAdditional.TestAsciiChars;
@@ -557,6 +568,28 @@ begin
   CheckFalse(FPasLexer.NextToken, 'NextToken returns False at end of input');
   CheckEquals(Integer(tkEOF), Integer(FPasLexer.TokenID), 'Token becomes tkEOF');
   CheckFalse(FPasLexer.NextToken, 'Remains tkEOF');
+end;
+
+procedure TestTPasLexerAdditional.TestSetDataEmptyString;
+var
+  S: string;
+begin
+  S := '';
+  FPasLexer.SetData(S);
+  CheckEquals(Integer(tkEOF), Integer(FPasLexer.TokenID), 'Empty input starts at tkEOF');
+
+  while FPasLexer.TokenID <> tkEOF do
+    FPasLexer.NextToken;
+  CheckEquals(Integer(tkEOF), Integer(FPasLexer.TokenID), 'Typical token loop stays at tkEOF');
+  CheckFalse(FPasLexer.NextToken, 'NextToken returns False for empty input');
+
+  S := 'begin end';
+  FPasLexer.SetData(S);
+  CheckEquals(Integer(tkBegin), Integer(FPasLexer.TokenID), 'Lexer can be reused after empty input');
+
+  S := '';
+  FPasLexer.SetData(S);
+  CheckEquals(Integer(tkEOF), Integer(FPasLexer.TokenID), 'Empty input after data ends at tkEOF');
 end;
 
 procedure TestTPasLexerAdditional.TestNextTokenNoJunk;

@@ -154,7 +154,7 @@ begin
   try
     HRTimer := THighResolutionStopwatch.Create;
     try
-      FileContent := 'unit test2; 1e- 1.5.6 123e';
+      FileContent := 'unit test2; 1e-33.4 1.5.6 123e';
 
       try
         Memo1.Lines.BeginUpdate;
@@ -237,7 +237,7 @@ begin
         //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\VirtualTrees.pas';
         //FileName := 'C:\AirusTT\Source\AirusTT_Lib\CallbackSrv_TLB.pas';
         //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\BeginEndCountTestUnit2.pas';
-        //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\TestPasHi.pas';
+        FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\TestPasHi.pas';
         //FileName := 'C:\AirusTT\Source\AirusTT_Lib\N_BIOS.pas';
         //FileName := 'C:\AirusTT\Source\Libraries\EhLib110\Lazarus\Lib\DefaultItemsCollectionEditorsEh.pas';
         //FileName := 'C:\AirusTT\Source\SrvSite\Tovs.Exchange.HTTP.pas';
@@ -252,7 +252,7 @@ begin
         //FileName := 'C:\AirusTT\Source\Modules\OTK\N_InsuranceIncident.pas';
         //FileName := 'C:\AirusTT\Source\Libraries\EhLib91\PropFilerEh.pas';
         //FileName := 'C:\AirusTT\Source\AirusTT_Lib\aiTimer.pas';
-        FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\EmptyUnit.pas';
+        //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\EmptyUnit.pas';
 
         //StrStream.LoadFromFile(FileName);
         //FileContent := StrStream.DataString;
@@ -616,7 +616,7 @@ begin
       //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\VirtualTrees.pas';
       //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\TestPasHi.pas';
 
-      DataString := TPasParser.GetFileDataString(FileName);
+      //DataString := TPasParser.GetFileDataString(FileName);
 
       HRTimer.Restart;
       if not Parser.ParseString(DataString) then

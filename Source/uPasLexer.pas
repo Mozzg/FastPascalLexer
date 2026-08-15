@@ -340,13 +340,14 @@ end;
 
 procedure TPasLexer.NumberHandler;
 var
+  WasExponent: Boolean;
   WasPoint: Boolean;
 begin
   Inc(FLexerState.CurrentIndex);
   FLexerState.CurrentToken := tkNumber;
+  WasExponent := False;
   WasPoint := False;
 
-  // +++ проверить правильность
   while True do
   begin
     case FStartPtr[FLexerState.CurrentIndex] of
@@ -354,13 +355,26 @@ begin
         Inc(FLexerState.CurrentIndex);
       'e', 'E':
       begin
-        FLexerState.CurrentToken := tkFloat;
         Inc(FLexerState.CurrentIndex);
         if CharInSet(FStartPtr[FLexerState.CurrentIndex], ['-', '+']) then
           Inc(FLexerState.CurrentIndex);
+        // An exponent without digits ('1e-', '1E+') is not a float:
+        // backtrack past the 'e' and the sign, so 'e' is lexed as an identifier.
+        if not CharInSet(FStartPtr[FLexerState.CurrentIndex], ['0'..'9']) then
+        begin
+          Dec(FLexerState.CurrentIndex);
+          if CharInSet(FStartPtr[FLexerState.CurrentIndex], ['-', '+']) then
+            Dec(FLexerState.CurrentIndex);
+          Break;
+        end;
+        FLexerState.CurrentToken := tkFloat;
+        WasExponent := True;
       end;
       '.':
-        if (FStartPtr[FLexerState.CurrentIndex + 1] = '.') or (FStartPtr[FLexerState.CurrentIndex + 1] = ')') or WasPoint then
+        // A dot after the exponent ('1e33.3') is not part of the number.
+        if (FStartPtr[FLexerState.CurrentIndex + 1] = '.') or (FStartPtr[FLexerState.CurrentIndex + 1] = ')')
+            or WasPoint or WasExponent
+        then
           Break
         else
         begin
@@ -961,7 +975,7 @@ begin
     // Hash for lowercase converted to uppercase
     case Ch of
       'a'..'z': FCharHashTable[Ch] := (Word(Ch) xor $0020) - HASH_OFFSET;
-      'A'..'Z', '_': FCharHashTable[Ch] := Ord(Ch) - HASH_OFFSET;
+      'A'..'Z': FCharHashTable[Ch] := Ord(Ch) - HASH_OFFSET;
     else
       FCharHashTable[Ch] := 0;
     end;
@@ -1028,9 +1042,11 @@ end;
 
 procedure TPasLexer.SetData(var ADataString: string);
 begin
-  FStartPtr := @ADataString[1];
+  FStartPtr := Pointer(ADataString);
   FEndPtr := FStartPtr + Length(ADataString);
   Reset;
+  if FStartPtr = nil then
+    FLexerState.CurrentToken := tkEOF;
 end;
 
 procedure TPasLexer.Reset;
@@ -1047,6 +1063,11 @@ function TPasLexer.NextToken: Boolean;
 var
   CurChar: Char;
 begin
+  if FStartPtr = nil then
+  begin
+    FLexerState.CurrentToken := tkEOF;
+    Exit(False);
+  end;
   if not (FLexerState.CurrentToken in DIRECTIVE_UNSIGNIFICANT_TOKENS) then
   begin
     FLexerState.LastSignificantToken := FLexerState.CurrentToken;
