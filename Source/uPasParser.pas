@@ -236,6 +236,7 @@ begin
   InitialTokensCount := 0;
 
   InitialTokensSize := Trunc(Length(FDataString) / SIZE_TOKEN_RATIO);
+  if InitialTokensSize = 0 then InitialTokensSize := 1;
   SetLength(InitialTokens, InitialTokensSize);
   SetLength(AddTokenFlags, InitialTokensSize);
 
@@ -353,6 +354,8 @@ begin
   try
     FRootLexemeNode.ParseItself;
   except
+    on E: Exception do
+      FreeAndNil(FRootLexemeNode);
     on E: EPasGrammarParserException do
       raise Exception.CreateFmt(E.Message + '(Line: %d; Pos: %d; Token: %s)', [E.LineNumber, E.LineCharIndex,
           TOKEN_NAMES[E.CurrentToken]]);
@@ -463,7 +466,7 @@ begin
 
   MemStream := TMemoryStream.Create;
   try
-    FileStream := TFileStream.Create(AFileName, fmOpenReadWrite or fmShareDenyNone);
+    FileStream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
     try
       MemStream.LoadFromStream(FileStream);
       DataStartPosition := MemStream.Seek(0, soBeginning);
@@ -479,13 +482,12 @@ begin
       SetLength(Buffer, BufferSize);
       MemStream.ReadBuffer(Buffer, Length(Buffer));
 
-      Mask := IS_TEXT_UNICODE_UNICODE_MASK or IS_TEXT_UNICODE_REVERSE_MASK
-          or IS_TEXT_UNICODE_NOT_UNICODE_MASK or IS_TEXT_UNICODE_NOT_ASCII_MASK;
+      Mask := IS_TEXT_UNICODE_UNICODE_MASK or IS_TEXT_UNICODE_REVERSE_MASK;
       IsTextUnicode(Buffer, Length(Buffer), @Mask);
 
-      if (BufferSize mod 2 = 0) and (Mask and IS_TEXT_UNICODE_UNICODE_MASK <> 0) then
+      if (BufferSize mod 2 = 0) and ((Mask and IS_TEXT_UNICODE_UNICODE_MASK) <> 0) then
         DataEncoding := TEncoding.Unicode
-      else if (BufferSize mod 2 = 0) and (Mask and IS_TEXT_UNICODE_REVERSE_MASK <> 0) then
+      else if (BufferSize mod 2 = 0) and ((Mask and IS_TEXT_UNICODE_REVERSE_MASK) <> 0) then
         DataEncoding := TEncoding.BigEndianUnicode
       else
         DataEncoding := TEncoding.UTF8;

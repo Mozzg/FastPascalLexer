@@ -339,9 +339,12 @@ begin
 end;
 
 procedure TPasLexer.NumberHandler;
+var
+  WasPoint: Boolean;
 begin
   Inc(FLexerState.CurrentIndex);
   FLexerState.CurrentToken := tkNumber;
+  WasPoint := False;
 
   // +++ проверить правильность
   while True do
@@ -357,11 +360,12 @@ begin
           Inc(FLexerState.CurrentIndex);
       end;
       '.':
-        if (FStartPtr[FLexerState.CurrentIndex + 1] = '.') or (FStartPtr[FLexerState.CurrentIndex + 1] = ')') then
+        if (FStartPtr[FLexerState.CurrentIndex + 1] = '.') or (FStartPtr[FLexerState.CurrentIndex + 1] = ')') or WasPoint then
           Break
         else
         begin
           FLexerState.CurrentToken := tkFloat;
+          WasPoint := True;
           Inc(FLexerState.CurrentIndex);
         end;
     else

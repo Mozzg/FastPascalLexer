@@ -130,11 +130,11 @@ object fmMainTest: TfmMainTest
     OnClick = Button9Click
   end
   object Button10: TButton
-    Left = 144
-    Top = 440
-    Width = 75
+    Left = 136
+    Top = 132
+    Width = 114
     Height = 25
-    Caption = 'Button10'
+    Caption = 'Test parse 2'
     TabOrder = 10
     OnClick = Button10Click
   end

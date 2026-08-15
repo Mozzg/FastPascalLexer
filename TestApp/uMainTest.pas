@@ -143,24 +143,79 @@ end;
 
 procedure TfmMainTest.Button10Click(Sender: TObject);
 var
-  SL: TStringList;
-  str: string;
+  Lexer: TPasLexer;
+  FileContent, CurrentToken, DirectiveState: string;
+  HRTimer: THighResolutionStopwatch;
+  i: Integer;
+  Elapsed: Int64;
+  f: Double;
 begin
-  SL := TStringList.Create;
+  Lexer := TPasLexer.Create;
   try
-    SL.Delimiter := ';';
-    SL.Values['user'] := 'postman@td-auto.ru';
-    SL.Values['fromname'] := 'ТДА рассылка';
-    SL.Values['pass'] := '27rJ:rh,=C6v&gt;^';
-    SL.Values['host'] := 'mail.td-auto.ru';
-    SL.Values['port'] := '587';
+    HRTimer := THighResolutionStopwatch.Create;
+    try
+      FileContent := 'unit test2; 1e- 1.5.6 123e';
 
-    Log('Text=' + SL.DelimitedText);
-    str := SL.Values['pass'];
-    Log('Pass=' + str);
+      try
+        Memo1.Lines.BeginUpdate;
+        try
+          HRTimer.Restart;
+          Lexer.SetData(FileContent);
+          while Lexer.TokenID <> tkEOF do
+          begin
+            CurrentToken := Lexer.TokenString;
+
+            DirectiveState := EmptyStr;
+            for i := Low(Lexer.LexerState.IfDirectiveStateArray) to High(Lexer.LexerState.IfDirectiveStateArray) do
+              DirectiveState := DirectiveState + COMMA_BOOL_ARRAY_SPACE[DirectiveState = EmptyStr]
+                  + GetEnumName(TypeInfo(TIfDirectiveState), Ord(Lexer.LexerState.IfDirectiveStateArray[i]));
+            DirectiveState := '[' + DirectiveState + ']';
+
+            Log(TOKEN_NAMES[Lexer.TokenID]
+                + '(' + IfThen(Lexer.TokenID in [tkCRLF, tkCRLFComment], '', CurrentToken)
+                + ')' (*+ '  BeginEnd=' + IntToStr(Lexer.LexerState.Counters.BeginEndCount)*) + '  LineNo=' + IntToStr(Lexer.LexerState.CurrentLine)
+                + '  IfDirCount=' + IntToStr(Lexer.LexerState.Counters.IfDirectiveCount)
+                + '  IfDifValues=' + DirectiveState
+                //+ '  BlockState=' + Lexer.LexerState.GetCurrentBlockTypeState
+                );
+            {Log(TOKEN_NAMES[Lexer.TokenID]);
+            Log(IfThen(Lexer.TokenID in [tkCRLF, tkCRLFComment], '', CurrentToken));
+            Log('BeginEnd=' + IntToStr(Lexer.LexerState.Counters.BeginEndCount));
+            Log('LineNo=' + IntToStr(Lexer.LexerState.CurrentLine));
+            Log('IfDirCount=' + IntToStr(Lexer.LexerState.Counters.IfDirectiveCount)); }
+            Application.ProcessMessages;
+
+            //if Lexer.TokenID = tkImplementation then Break;
+
+            Lexer.NextToken;
+          end;
+          Elapsed := HRTimer.ElapsedMicroseconds;
+        finally
+          Memo1.Lines.EndUpdate;
+        end;
+      except
+        on E: EPasLexerException do
+        begin
+          Log('LineNo=' + IntToStr(E.LineNumber));
+          Log('LineCharIndex=' + IntToStr(E.LineCharIndex));
+          Log('CurrentToken=' + TOKEN_NAMES[E.CurrentToken]);
+          raise;
+        end;
+      end;
+
+      Log('TimeMicro: ' + IntToStr(Elapsed));
+      //Log('BeginEndCount=' + IntToStr(Lexer.LexerState.Counters.BeginEndCount));
+      Log('RoundCount=' + IntToStr(Lexer.LexerState.Counters.RoundCount));
+      Log('SquareCount=' + IntToStr(Lexer.LexerState.Counters.SquareCount));
+      Log('IfDirectiveCount=' + IntToStr(Lexer.LexerState.Counters.IfDirectiveCount));
+    finally
+      HRTimer.Free;
+    end;
   finally
-    SL.Free;
+    Lexer.Free;
   end;
+
+  Log('DONE');
 end;
 
 procedure TfmMainTest.Button1Click(Sender: TObject);
