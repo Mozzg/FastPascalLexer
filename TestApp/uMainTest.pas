@@ -156,8 +156,8 @@ begin
   try
     HRTimer := THighResolutionStopwatch.Create;
     try
-      //FileContent := 'unit test2; 1e-33.4 1.5.6 123e';
-      FileContent := ' ''abc'''' ';
+      FileContent := 'unit test2; 1e-33.4 1.5.6 123e';
+      //FileContent := ' ''abc'''' ';
 
       try
         Memo1.Lines.BeginUpdate;

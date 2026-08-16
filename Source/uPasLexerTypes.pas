@@ -259,7 +259,7 @@ const
   DIRECTIVE_UNSIGNIFICANT_TOKENS: TTokenKindSet = [tkCurlyComment, tkSingleLineComment, tkStarParenComment,
       tkCompilerDirective, tkCRLF, tkCRLFComment, tkSpace];
 
-  DELPHI_KEYWORDS: array[0..134] of TKeywordRec = (
+  DELPHI_KEYWORDS: array[0..132] of TKeywordRec = (
     (Word: 'and';            Token: tkAnd), // reserve words start
     (Word: 'array';          Token: tkArray),
     (Word: 'as';             Token: tkAs),
@@ -344,8 +344,6 @@ const
     (Word: 'helper';         Token: tkHelper),
     (Word: 'implements';     Token: tkImplements),
     (Word: 'index';          Token: tkIndex),
-    (Word: 'inline';         Token: tkInline),
-    (Word: 'library';        Token: tkLibrary),
     (Word: 'local';          Token: tkLocal),
     (Word: 'message';        Token: tkMessage),
     (Word: 'name';           Token: tkName),

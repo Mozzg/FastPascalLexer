@@ -352,6 +352,8 @@ begin
     'A dot after the exponent is not part of the number');
   CheckEquals('tkFloat;tkPoint;tkNumber', TokenNames('1.5e+3.2'),
     'A dot after a signed exponent is not part of the number');
+  CheckEquals('tkFloat;tkPoint;tkNumber', TokenNames('1.5.6'),
+    'A dot after float is not part of the number');
 end;
 
 procedure TestTPasLexerAdditional.TestAsciiChars;
