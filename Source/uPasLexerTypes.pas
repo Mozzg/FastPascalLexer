@@ -208,6 +208,8 @@ type
   );
 
   TTokenKindSet = set of TTokenKind;
+  TTokenKindArray = array of TTokenKind;
+
   TCommentState = (
     csNo,
     csCurly,
