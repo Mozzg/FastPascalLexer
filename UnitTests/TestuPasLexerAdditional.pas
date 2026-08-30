@@ -706,7 +706,7 @@ procedure TestTPasLexerAdditional.TestStarParenDirectiveLineBreak;
 begin
   // +++ поидее неправильно
   CheckTokensEqual(
-      [tkCompilerDirective, tkCRLF, tkIdentifier, tkStar, tkRoundClose, tkIdentifier],
+      [tkCompilerDirective, tkIdentifier],
       GetTokens('(*$IFDEF X' + sLineBreak + 'Y*)z'),
       'Star paren directive with a line break');
 end;

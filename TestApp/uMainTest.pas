@@ -158,7 +158,8 @@ begin
     try
       //FileContent := 'unit test2; 1e-33.4 1.5.6 123e';
       //FileContent := '(*$IFDEF X' + sLineBreak + 'Y*)z';
-      FileContent := '(*$IFDEF CONSOLE_TESTRUNNER ' + sLineBreak + ' test123*)z';
+      FileContent := '(*$IFDEF CONSOLE_TESTRUNNER ' {+ sLineBreak} + ' test123*)z' + sLineBreak + 'a := 1;{$ENDIF}';
+      //FileContent := '{$IFDEF test}abc{$ELSE}xyz{$ENDIF}';
 
       try
         Memo1.Lines.BeginUpdate;

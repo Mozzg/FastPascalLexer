@@ -104,6 +104,7 @@ type
     procedure PointerSymbolHandler;
     procedure SymbolHandler;
     procedure UnknownHandler;
+    procedure CompilerDirectiveHandler;
     // PostIdentifierHandlers
     procedure PropertyPostHandler(var AToken: TTokenKind);
     procedure PropertyDirectivePostHandler(var AToken: TTokenKind);
@@ -397,174 +398,19 @@ begin
 end;
 
 procedure TPasLexer.CurlyOpenHandler;
-var
-  CompilerToken: TTokenKind;
-  DirectiveStateLength, DirectiveCountersLength, i, j: Integer;
-  FoundCounters: Boolean;
 begin
   // +++ проверить токены если директива компилятора на нескольких строках
   if FStartPtr[FLexerState.CurrentIndex + 1] = '$' then
   begin
     FLexerState.CurrentToken := tkCompilerDirective;
-    Inc(FLexerState.CurrentIndex);
-  end
-  else
-  begin
-    FLexerState.CurrentToken := tkCurlyComment;
-    FLexerState.CommentState := csCurly;
+    Inc(FLexerState.CurrentIndex, 2);
+    CompilerDirectiveHandler;
+    Exit;
   end;
 
+  FLexerState.CurrentToken := tkCurlyComment;
+  FLexerState.CommentState := csCurly;
   Inc(FLexerState.CurrentIndex);
-  if FLexerState.CurrentToken = tkCompilerDirective then
-  begin
-    FLexerState.IsCompilerDirective := True;
-    CompilerToken := GetIdentifierKindWithTree;
-    FLexerState.IsCompilerDirective := False;
-
-    case CompilerToken of
-      tkIfDefDirective, tkIfNDefDirective, tkIf, tkIfOptDirective:
-      begin
-        Inc(FLexerState.Counters.IfDirectiveCount);
-        // Add indication to IfDirectiveStateArray
-        SetLength(FLexerState.IfDirectiveStateArray, Length(FLexerState.IfDirectiveStateArray) + 1);
-        FLexerState.IfDirectiveStateArray[High(FLexerState.IfDirectiveStateArray)] := idsIf;
-        // Add current counters state as start of directive to IfDirectiveSavedCountersArray
-        SetLength(FLexerState.IfDirectiveSavedCountersArray, Length(FLexerState.IfDirectiveSavedCountersArray) + 1);
-        FLexerState.IfDirectiveSavedCountersArray[High(FLexerState.IfDirectiveSavedCountersArray)].StartCounters := FLexerState.Counters;
-      end;
-      tkElseIfDirective, tkElse:
-      begin
-        DirectiveStateLength := Length(FLexerState.IfDirectiveStateArray);
-        DirectiveCountersLength := Length(FLexerState.IfDirectiveSavedCountersArray);
-
-        if FLexerState.Counters.IfDirectiveCount <= 0 then
-          RaiseCompilerDirectiveException(EMESSAGE_UNEXPECTED_ELSE_DIRECTIVE)
-        else if (DirectiveStateLength <> DirectiveCountersLength) or (DirectiveStateLength = 0) or (DirectiveCountersLength = 0) then
-          RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH)
-        else if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] = idsElse then
-          RaiseCompilerDirectiveException(EMESSAGE_UNEXPECTED_ELSE_DIRECTIVE);
-
-        // Save counters at end of main if to compare to others later
-        if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] = idsIf then
-          FLexerState.IfDirectiveSavedCountersArray[High(FLexerState.IfDirectiveSavedCountersArray)].EndCounters := FLexerState.Counters;
-
-        FoundCounters := False;
-        if CompilerToken = tkElseIfDirective then
-        begin
-          // Check if we need to compare counters
-          if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] <> idsIf then
-            for i := High(FLexerState.IfDirectiveStateArray) downto Low(FLexerState.IfDirectiveStateArray) do
-              if FLexerState.IfDirectiveStateArray[i] = idsIf then
-              begin
-                if not CompareMem(@FLexerState.Counters,
-                    @FLexerState.IfDirectiveSavedCountersArray[i].EndCounters, SizeOf(TPasLexerStateCounters))
-                then
-                  RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
-                Break;
-              end;
-
-          SetLength(FLexerState.IfDirectiveStateArray, DirectiveStateLength + 1);
-          SetLength(FLexerState.IfDirectiveSavedCountersArray, DirectiveCountersLength + 1);
-          Inc(DirectiveStateLength);
-
-          FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] := idsElseIf;
-
-          // Restore counters like at the start of if directive
-          for i := High(FLexerState.IfDirectiveStateArray) downto Low(FLexerState.IfDirectiveStateArray) do
-            if FLexerState.IfDirectiveStateArray[i] = idsIf then
-            begin
-              FLexerState.Counters := FLexerState.IfDirectiveSavedCountersArray[i].StartCounters;
-              FoundCounters := True;
-              Break;
-            end;
-        end
-        else  // CompilerToken = tkElse
-        begin
-          // Restore counters like at the start of if directive
-          for i := High(FLexerState.IfDirectiveStateArray) downto Low(FLexerState.IfDirectiveStateArray) do
-            if FLexerState.IfDirectiveStateArray[i] = idsIf then
-            begin
-              FLexerState.Counters := FLexerState.IfDirectiveSavedCountersArray[i].StartCounters;
-              FoundCounters := True;
-              Break;
-            end;
-
-          if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] = idsElseIf then
-          begin
-            SetLength(FLexerState.IfDirectiveStateArray, DirectiveStateLength + 1);
-            SetLength(FLexerState.IfDirectiveSavedCountersArray, DirectiveCountersLength + 1);
-            Inc(DirectiveStateLength);
-          end;
-          FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] := idsElse;
-        end;
-
-        if not FoundCounters then
-          RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_NOTFOUND_ON_RESTORE);
-      end;
-      tkEndIfDirective, tkIfEndDirective:
-      begin
-        DirectiveStateLength := Length(FLexerState.IfDirectiveStateArray);
-        DirectiveCountersLength := Length(FLexerState.IfDirectiveSavedCountersArray);
-
-        if (DirectiveStateLength <> DirectiveCountersLength) or (DirectiveStateLength = 0) or (DirectiveCountersLength = 0) then
-          RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH);
-
-        // Search for last if directive counters and compare to current. Also decrease state arrays.
-        if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] = idsIf then
-        begin
-          // Decrease arrays
-          SetLength(FLexerState.IfDirectiveStateArray, DirectiveStateLength - 1);
-          SetLength(FLexerState.IfDirectiveSavedCountersArray, DirectiveCountersLength - 1);
-          Dec(DirectiveStateLength);
-          Dec(DirectiveCountersLength);
-        end
-        else
-        begin
-          FoundCounters := False;
-          j := DirectiveStateLength - 1;
-          if FLexerState.IfDirectiveStateArray[j] <> idsElseIf then
-          begin
-            Dec(j);
-            if (j < 0) or ((j >= 0) and (FLexerState.IfDirectiveStateArray[j] <> idsElseIf)) then
-            begin
-              FoundCounters := True;
-              Inc(j);
-            end;
-          end;
-
-          if not FoundCounters then
-            for i := j downto Low(FLexerState.IfDirectiveStateArray) do
-              if FLexerState.IfDirectiveStateArray[i] <> idsElseIf then
-              begin
-                j := i;
-                FoundCounters := True;
-              end;
-
-          if not FoundCounters then
-            RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_NOTFOUND_ON_RESTORE);
-
-          // Compare counters
-          if not CompareMem(@FLexerState.Counters,
-              @FLexerState.IfDirectiveSavedCountersArray[j].EndCounters, SizeOf(TPasLexerStateCounters))
-          then
-            RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
-          // Decrease arrays
-          SetLength(FLexerState.IfDirectiveStateArray, j);
-          SetLength(FLexerState.IfDirectiveSavedCountersArray, j);
-          DirectiveStateLength := j;
-          DirectiveCountersLength := j;
-        end;
-
-        Dec(FLexerState.Counters.IfDirectiveCount);
-
-        // Compare directive counter and array length, they must be equal at end directive
-        if (FLexerState.Counters.IfDirectiveCount <> DirectiveStateLength)
-            or (FLexerState.Counters.IfDirectiveCount <> DirectiveCountersLength)
-        then
-          RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH);
-      end;
-    end;
-  end;
 
   while FLexerState.CurrentIndex < FLexerState.MaxIndex do
     case FStartPtr[FLexerState.CurrentIndex] of
@@ -574,25 +420,8 @@ begin
         Inc(FLexerState.CurrentIndex);
         Break;
       end;
-      #10:
-        if FLexerState.CurrentToken = tkCompilerDirective then
-        begin
-          Inc(FLexerState.CurrentIndex);
-          FLexerState.WasLineChange := True;
-        end
-        else
-          Break;
-      #13:
-        if FLexerState.CurrentToken = tkCompilerDirective then
-        begin
-          if FStartPtr[FLexerState.CurrentIndex + 1] = #10 then
-            Inc(FLexerState.CurrentIndex, 2)
-          else
-            Inc(FLexerState.CurrentIndex);
-          FLexerState.WasLineChange := True;
-        end
-        else
-          Break;
+      #0, #10, #13:
+        Break;
     else
       Inc(FLexerState.CurrentIndex);
     end;
@@ -607,7 +436,12 @@ begin
     begin
       FLexerState.CurrentToken := tkStarParenComment;
       if FStartPtr[FLexerState.CurrentIndex + 1] = '$' then
-        FLexerState.CurrentToken := tkCompilerDirective
+      begin
+        FLexerState.CurrentToken := tkCompilerDirective;
+        Inc(FLexerState.CurrentIndex, 2);
+        CompilerDirectiveHandler;
+        Exit;
+      end
       else
         FLexerState.CommentState := csStarParen;
 
@@ -816,6 +650,200 @@ procedure TPasLexer.UnknownHandler;
 begin
   Inc(FLexerState.CurrentIndex);
   FLexerState.CurrentToken := tkUnknown;
+end;
+
+procedure TPasLexer.CompilerDirectiveHandler;
+var
+  CompilerToken: TTokenKind;
+  DirectiveStateLength, DirectiveCountersLength, i, j: Integer;
+  FoundCounters: Boolean;
+begin
+  if FLexerState.CurrentToken = tkCompilerDirective then
+  begin
+    FLexerState.IsCompilerDirective := True;
+    CompilerToken := GetIdentifierKindWithTree;
+    FLexerState.IsCompilerDirective := False;
+
+    case CompilerToken of
+      tkIfDefDirective, tkIfNDefDirective, tkIf, tkIfOptDirective:
+      begin
+        Inc(FLexerState.Counters.IfDirectiveCount);
+        // Add indication to IfDirectiveStateArray
+        SetLength(FLexerState.IfDirectiveStateArray, Length(FLexerState.IfDirectiveStateArray) + 1);
+        FLexerState.IfDirectiveStateArray[High(FLexerState.IfDirectiveStateArray)] := idsIf;
+        // Add current counters state as start of directive to IfDirectiveSavedCountersArray
+        SetLength(FLexerState.IfDirectiveSavedCountersArray, Length(FLexerState.IfDirectiveSavedCountersArray) + 1);
+        FLexerState.IfDirectiveSavedCountersArray[High(FLexerState.IfDirectiveSavedCountersArray)].StartCounters := FLexerState.Counters;
+      end;
+      tkElseIfDirective, tkElse:
+      begin
+        DirectiveStateLength := Length(FLexerState.IfDirectiveStateArray);
+        DirectiveCountersLength := Length(FLexerState.IfDirectiveSavedCountersArray);
+
+        if FLexerState.Counters.IfDirectiveCount <= 0 then
+          RaiseCompilerDirectiveException(EMESSAGE_UNEXPECTED_ELSE_DIRECTIVE)
+        else if (DirectiveStateLength <> DirectiveCountersLength) or (DirectiveStateLength = 0) or (DirectiveCountersLength = 0) then
+          RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH)
+        else if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] = idsElse then
+          RaiseCompilerDirectiveException(EMESSAGE_UNEXPECTED_ELSE_DIRECTIVE);
+
+        // Save counters at end of main if to compare to others later
+        if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] = idsIf then
+          FLexerState.IfDirectiveSavedCountersArray[High(FLexerState.IfDirectiveSavedCountersArray)].EndCounters := FLexerState.Counters;
+
+        FoundCounters := False;
+        if CompilerToken = tkElseIfDirective then
+        begin
+          // Check if we need to compare counters
+          if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] <> idsIf then
+            for i := High(FLexerState.IfDirectiveStateArray) downto Low(FLexerState.IfDirectiveStateArray) do
+              if FLexerState.IfDirectiveStateArray[i] = idsIf then
+              begin
+                if not CompareMem(@FLexerState.Counters,
+                    @FLexerState.IfDirectiveSavedCountersArray[i].EndCounters, SizeOf(TPasLexerStateCounters))
+                then
+                  RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
+                Break;
+              end;
+
+          SetLength(FLexerState.IfDirectiveStateArray, DirectiveStateLength + 1);
+          SetLength(FLexerState.IfDirectiveSavedCountersArray, DirectiveCountersLength + 1);
+          Inc(DirectiveStateLength);
+
+          FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] := idsElseIf;
+
+          // Restore counters like at the start of if directive
+          for i := High(FLexerState.IfDirectiveStateArray) downto Low(FLexerState.IfDirectiveStateArray) do
+            if FLexerState.IfDirectiveStateArray[i] = idsIf then
+            begin
+              FLexerState.Counters := FLexerState.IfDirectiveSavedCountersArray[i].StartCounters;
+              FoundCounters := True;
+              Break;
+            end;
+        end
+        else  // CompilerToken = tkElse
+        begin
+          // Restore counters like at the start of if directive
+          for i := High(FLexerState.IfDirectiveStateArray) downto Low(FLexerState.IfDirectiveStateArray) do
+            if FLexerState.IfDirectiveStateArray[i] = idsIf then
+            begin
+              FLexerState.Counters := FLexerState.IfDirectiveSavedCountersArray[i].StartCounters;
+              FoundCounters := True;
+              Break;
+            end;
+
+          if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] = idsElseIf then
+          begin
+            SetLength(FLexerState.IfDirectiveStateArray, DirectiveStateLength + 1);
+            SetLength(FLexerState.IfDirectiveSavedCountersArray, DirectiveCountersLength + 1);
+            Inc(DirectiveStateLength);
+          end;
+          FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] := idsElse;
+        end;
+
+        if not FoundCounters then
+          RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_NOTFOUND_ON_RESTORE);
+      end;
+      tkEndIfDirective, tkIfEndDirective:
+      begin
+        DirectiveStateLength := Length(FLexerState.IfDirectiveStateArray);
+        DirectiveCountersLength := Length(FLexerState.IfDirectiveSavedCountersArray);
+
+        if (DirectiveStateLength <> DirectiveCountersLength) or (DirectiveStateLength = 0) or (DirectiveCountersLength = 0) then
+          RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH);
+
+        // Search for last if directive counters and compare to current. Also decrease state arrays.
+        if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] = idsIf then
+        begin
+          // Decrease arrays
+          SetLength(FLexerState.IfDirectiveStateArray, DirectiveStateLength - 1);
+          SetLength(FLexerState.IfDirectiveSavedCountersArray, DirectiveCountersLength - 1);
+          Dec(DirectiveStateLength);
+          Dec(DirectiveCountersLength);
+        end
+        else
+        begin
+          FoundCounters := False;
+          j := DirectiveStateLength - 1;
+          if FLexerState.IfDirectiveStateArray[j] <> idsElseIf then
+          begin
+            Dec(j);
+            if (j < 0) or ((j >= 0) and (FLexerState.IfDirectiveStateArray[j] <> idsElseIf)) then
+            begin
+              FoundCounters := True;
+              Inc(j);
+            end;
+          end;
+
+          if not FoundCounters then
+            for i := j downto Low(FLexerState.IfDirectiveStateArray) do
+              if FLexerState.IfDirectiveStateArray[i] <> idsElseIf then
+              begin
+                j := i;
+                FoundCounters := True;
+              end;
+
+          if not FoundCounters then
+            RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_NOTFOUND_ON_RESTORE);
+
+          // Compare counters
+          if not CompareMem(@FLexerState.Counters,
+              @FLexerState.IfDirectiveSavedCountersArray[j].EndCounters, SizeOf(TPasLexerStateCounters))
+          then
+            RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
+          // Decrease arrays
+          SetLength(FLexerState.IfDirectiveStateArray, j);
+          SetLength(FLexerState.IfDirectiveSavedCountersArray, j);
+          DirectiveStateLength := j;
+          DirectiveCountersLength := j;
+        end;
+
+        Dec(FLexerState.Counters.IfDirectiveCount);
+
+        // Compare directive counter and array length, they must be equal at end directive
+        if (FLexerState.Counters.IfDirectiveCount <> DirectiveStateLength)
+            or (FLexerState.Counters.IfDirectiveCount <> DirectiveCountersLength)
+        then
+          RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH);
+      end;
+    end;
+
+    while FLexerState.CurrentIndex < FLexerState.MaxIndex do
+      case FStartPtr[FLexerState.CurrentIndex] of
+        '}':
+        begin
+          FLexerState.CommentState := csNo;
+          Inc(FLexerState.CurrentIndex);
+          Break;
+        end;
+        '*':
+        begin
+          if FStartPtr[FLexerState.CurrentIndex + 1] = ')' then
+          begin
+            FLexerState.CommentState := csNo;
+            Inc(FLexerState.CurrentIndex, 2);
+            Break;
+          end
+          else
+            Inc(FLexerState.CurrentIndex);
+        end;
+        #10:
+        begin
+          Inc(FLexerState.CurrentIndex);
+          FLexerState.WasLineChange := True;
+        end;
+        #13:
+        begin
+          if FStartPtr[FLexerState.CurrentIndex + 1] = #10 then
+            Inc(FLexerState.CurrentIndex, 2)
+          else
+            Inc(FLexerState.CurrentIndex);
+          FLexerState.WasLineChange := True;
+        end
+      else
+        Inc(FLexerState.CurrentIndex);
+      end;
+  end;
 end;
 
 procedure TPasLexer.PropertyPostHandler(var AToken: TTokenKind);
