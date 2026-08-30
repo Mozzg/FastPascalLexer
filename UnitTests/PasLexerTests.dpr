@@ -15,6 +15,10 @@
     to run the tests.
 }
 
+(*$IFDEF DEBUG
+*)
+{$ENDIF}
+
 {$IFDEF CONSOLE_TESTRUNNER}
 {$APPTYPE CONSOLE}
 {$ENDIF}

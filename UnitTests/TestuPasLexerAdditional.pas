@@ -66,6 +66,15 @@ type
     procedure TestNextTokenWithKind;
     procedure TestNextTokenNoDirectiveBranching;
     procedure TestLexerDumpSamples;
+    procedure TestNextTokenWithKindNotFound;
+    procedure TestNextTokenNoDirectiveBranchingElseBranch;
+    procedure TestEmbeddedNullChar;
+    procedure TestTrailingLineBreak;
+    procedure TestConsecutiveLineBreaks;
+    procedure TestNumberIdentifierSequences;
+    procedure TestStarParenDirectiveLineBreak;
+    procedure TestDirectiveKeywordEdgeCases;
+    procedure TestDirectiveErrorCountersNotFoundOnRestore;
   end;
 
 implementation
@@ -593,6 +602,188 @@ begin
     CheckTokenEquals(tkEOF, FPasLexer.TokenID,
         Format('Sample %d must lex to EOF: %s', [i, S]));
   end;
+end;
+
+procedure TestTPasLexerAdditional.TestNextTokenWithKindNotFound;
+var
+  S: string;
+begin
+  S := 'a := 1;';
+  FPasLexer.SetData(S);
+  CheckFalse(FPasLexer.NextTokenWithKind(tkImplementation),
+      'NextTokenWithKind returns False when the kind is absent');
+  CheckTokenEquals(tkEOF, FPasLexer.TokenID, 'Lexer is at EOF');
+end;
+
+// Starting inside the else branch returns the tokens of that branch only
+procedure TestTPasLexerAdditional.TestNextTokenNoDirectiveBranchingElseBranch;
+var
+  S: string;
+begin
+  S := '{$IFDEF X}a{$ELSE}b{$ENDIF}c';
+  FPasLexer.SetData(S);
+  CheckEquals('{$IFDEF X}', FPasLexer.TokenString, 'First token');
+  CheckTrue(FPasLexer.NextToken, 'Identifier of the if branch expected');
+  CheckTrue(FPasLexer.NextToken, 'ELSE directive expected');
+  CheckEquals('{$ELSE}', FPasLexer.TokenString, 'ELSE directive');
+
+  CheckTrue(FPasLexer.NextTokenNoDirectiveBranching, 'Token of the else branch expected');
+  CheckEquals('b', FPasLexer.TokenString, 'Token of the else branch');
+
+  // After the else branch ends lexing continues past the end directive
+  CheckTrue(FPasLexer.NextTokenNoDirectiveBranching, 'Token after the directive expected');
+  CheckEquals('c', FPasLexer.TokenString, 'Token after the end directive');
+  CheckFalse(FPasLexer.NextTokenNoDirectiveBranching, 'No more tokens');
+end;
+
+// #0 terminates the data for the lexer: everything after it is not lexed
+procedure TestTPasLexerAdditional.TestEmbeddedNullChar;
+var
+  S: string;
+begin
+  S := 'ab' + #0 + 'cd';
+  CheckTokensEqual([tkIdentifier], GetTokens(S),
+      'Lexing must stop at the embedded null char');
+
+  // #0 as the first char is already EOF
+  S := #0;
+  FPasLexer.SetData(S);
+  CheckTokenEquals(tkEOF, FPasLexer.TokenID, 'Data starting with a null char');
+  CheckFalse(FPasLexer.NextToken, 'NextToken after null char');
+
+  // A null char inside a string makes the string unterminated
+  CheckTokensEqual([tkUnterminatedString], GetTokens('''' + 'a' + #0 + 'b'),
+      'Null char inside a string');
+
+  // A null char at the end of a curly comment leaves the comment open
+  CheckTokensEqual([tkCurlyComment], GetTokens('{ab' + #0 + '}'),
+      'Null char inside a curly comment');
+  CheckTrue(csCurly = FPasLexer.LexerState.CommentState, 'Lexer commentstate with #0 inside a comment');
+end;
+
+// A line break at the very end of the data is still counted
+procedure TestTPasLexerAdditional.TestTrailingLineBreak;
+var
+  S: string;
+begin
+  S := 'a' + sLineBreak;
+  FPasLexer.SetData(S);
+  CheckTokenEquals(tkIdentifier, FPasLexer.TokenID, 'First token');
+
+  CheckTrue(FPasLexer.NextToken, 'Line break expected');
+  CheckTokenEquals(tkCRLF, FPasLexer.TokenID, 'Trailing line break token');
+  CheckFalse(FPasLexer.NextToken, 'EOF after the trailing line break');
+  CheckEquals(2, Integer(FPasLexer.LexerState.CurrentLine),
+      'Line counter is increased after the trailing line break');
+end;
+
+// CRCR, LF and LFCR are each a single line break token
+procedure TestTPasLexerAdditional.TestConsecutiveLineBreaks;
+begin
+  CheckTokensEqual(
+      [tkIdentifier, tkCRLF, tkCRLF, tkIdentifier, tkCRLF, tkCRLF, tkIdentifier],
+      GetTokens('a' + #13#13 + 'b' + #10#13 + 'c'),
+      'Consecutive line breaks');
+  CheckEquals(5, Integer(FPasLexer.LexerState.CurrentLine),
+      'Line after the last line break');
+end;
+
+// Numbers and identifiers are separated even without whitespace
+procedure TestTPasLexerAdditional.TestNumberIdentifierSequences;
+begin
+  CheckTokensEqual([tkNumber, tkIdentifier], GetTokens('1e'),
+      'Exponent without digits');
+  CheckTokensEqual([tkFloat, tkIdentifier], GetTokens('1e2x'),
+      'Float followed by identifier');
+  CheckTokensEqual([tkNumber, tkIdentifier], GetTokens('123abc'),
+      'Number followed by identifier');
+  CheckTokensEqual([tkPoint, tkNumber], GetTokens('.5'),
+      'Point followed by number');
+end;
+
+// (*$...*) directives are read like comments and do not span lines
+procedure TestTPasLexerAdditional.TestStarParenDirectiveLineBreak;
+begin
+  // +++ поидее неправильно
+  CheckTokensEqual(
+      [tkCompilerDirective, tkCRLF, tkIdentifier, tkStar, tkRoundClose, tkIdentifier],
+      GetTokens('(*$IFDEF X' + sLineBreak + 'Y*)z'),
+      'Star paren directive with a line break');
+end;
+
+// Conditional directive recognition inside the curly braces
+procedure TestTPasLexerAdditional.TestDirectiveKeywordEdgeCases;
+begin
+  // Lowercase directive keywords are recognized too
+  CheckTokensEqual([tkCompilerDirective, tkCompilerDirective], GetTokens('{$ifdef a}{$endif}'),
+      'Lowercase conditional directives');
+  CheckEquals(0, FPasLexer.LexerState.Counters.IfDirectiveCount,
+      'Lowercase directives balance');
+
+  // A directive keyword without a condition still opens a branch
+  CheckTokensEqual([tkCompilerDirective, tkCompilerDirective], GetTokens('{$IFDEF}{$ENDIF}'),
+      'Directives without conditions');
+  CheckEquals(0, FPasLexer.LexerState.Counters.IfDirectiveCount,
+      'Conditionless directives balance');
+
+  // An underscore after the keyword makes it an identifier, not a directive
+  CheckTokensEqual([tkCompilerDirective], GetTokens('{$IFDEF_1}'),
+      'IFDEF with underscore is not a conditional directive');
+  CheckEquals(0, FPasLexer.LexerState.Counters.IfDirectiveCount,
+      'No branch opened by IFDEF_1');
+  ExpectsLexerException('{$IFDEF_1}{$ENDIF}', EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH);
+
+  // The dollar sign must follow the opening brace directly
+  CheckTokensEqual([tkCurlyComment], GetTokens('{ $IFDEF A}'),
+      'Space after the opening brace makes it a comment');
+end;
+
+// The state array must contain an idsIf entry to restore the counters from
+procedure TestTPasLexerAdditional.TestDirectiveErrorCountersNotFoundOnRestore;
+var
+  S: string;
+  LState: TPasLexerState;
+  Raised: Boolean;
+
+  procedure ExpectCounterRestoreError(const AMessage: string);
+  begin
+    Raised := False;
+    try
+      while FPasLexer.NextToken do ;
+    except
+      on E: EPasLexerException do
+      begin
+        Raised := True;
+        CheckEquals(EMESSAGE_DIRECTIVE_COUNTERS_NOTFOUND_ON_RESTORE, E.Message, AMessage);
+      end;
+    end;
+    CheckTrue(Raised, 'Expected exception: ' + AMessage);
+  end;
+
+begin
+  // {$ELSEIF} cannot find an {$IF...} state to restore
+  S := '{$IFDEF A}{$ELSEIF B}';
+  FPasLexer.SetData(S);
+  LState := FPasLexer.LexerState;
+  LState.IfDirectiveStateArray[0] := idsElseIf;
+  FPasLexer.LexerState := LState;
+  ExpectCounterRestoreError('ELSEIF without an if state to restore');
+
+  // The same applies to {$ELSE}
+  S := '{$IFDEF A}{$ELSE}';
+  FPasLexer.SetData(S);
+  LState := FPasLexer.LexerState;
+  LState.IfDirectiveStateArray[0] := idsElseIf;
+  FPasLexer.LexerState := LState;
+  ExpectCounterRestoreError('ELSE without an if state to restore');
+
+  // At the end directive the state array must contain a non-ELSEIF entry
+  S := '{$IFDEF A}{$ENDIF}';
+  FPasLexer.SetData(S);
+  LState := FPasLexer.LexerState;
+  LState.IfDirectiveStateArray[0] := idsElseIf;
+  FPasLexer.LexerState := LState;
+  ExpectCounterRestoreError('ENDIF without an if state to restore');
 end;
 
 initialization

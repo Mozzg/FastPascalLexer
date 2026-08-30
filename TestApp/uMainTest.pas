@@ -156,8 +156,9 @@ begin
   try
     HRTimer := THighResolutionStopwatch.Create;
     try
-      FileContent := 'unit test2; 1e-33.4 1.5.6 123e';
-      //FileContent := ' ''abc'''' ';
+      //FileContent := 'unit test2; 1e-33.4 1.5.6 123e';
+      //FileContent := '(*$IFDEF X' + sLineBreak + 'Y*)z';
+      FileContent := '(*$IFDEF CONSOLE_TESTRUNNER ' + sLineBreak + ' test123*)z';
 
       try
         Memo1.Lines.BeginUpdate;

@@ -1102,7 +1102,7 @@ function TPasLexer.NextTokenNoJunk: Boolean;
 begin
   repeat
     Result := NextToken;
-  until Result and not (FLexerState.CurrentToken in [tkSingleLineComment, tkCurlyComment, tkStarParenComment, tkCompilerDirective,
+  until (not Result) or not (FLexerState.CurrentToken in [tkSingleLineComment, tkCurlyComment, tkStarParenComment, tkCompilerDirective,
       tkCRLF, tkCRLFComment, tkSpace]);
 end;
 
@@ -1124,14 +1124,14 @@ begin
         or ((SavedDirectiveLength > 0) and ((Length(FLexerState.IfDirectiveStateArray) < SavedDirectiveLength)
         or ((Length(FLexerState.IfDirectiveStateArray) = SavedDirectiveLength)
         and (FLexerState.IfDirectiveStateArray[High(FLexerState.IfDirectiveStateArray)] = SavedDirectiveState))));
-  until Result and SameDirectiveLevel;
+  until (not Result) or SameDirectiveLevel;
 end;
 
 function TPasLexer.NextTokenWithKind(ATokenKind: TTokenKind): Boolean;
 begin
   repeat
     Result := NextTokenNoJunk;
-  until Result and (FLexerState.CurrentToken = ATokenKind);
+  until (not Result) or (FLexerState.CurrentToken = ATokenKind);
 end;
 
 end.
