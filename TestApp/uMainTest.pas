@@ -28,6 +28,7 @@ type
     Button8: TButton;
     Button9: TButton;
     Button10: TButton;
+    Button11: TButton;
     procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
@@ -39,6 +40,7 @@ type
     procedure Button8Click(Sender: TObject);
     procedure Button9Click(Sender: TObject);
     procedure Button10Click(Sender: TObject);
+    procedure Button11Click(Sender: TObject);
   private type
     TMyClass122 = class( tobject)
       FField: Integer;
@@ -143,24 +145,97 @@ end;
 
 procedure TfmMainTest.Button10Click(Sender: TObject);
 var
-  SL: TStringList;
-  str: string;
+  Lexer: TPasLexer;
+  FileContent, CurrentToken, DirectiveState: string;
+  HRTimer: THighResolutionStopwatch;
+  i: Integer;
+  Elapsed: Int64;
+  //f: Double;
 begin
-  SL := TStringList.Create;
+  Lexer := TPasLexer.Create;
   try
-    SL.Delimiter := ';';
-    SL.Values['user'] := 'postman@td-auto.ru';
-    SL.Values['fromname'] := 'ТДА рассылка';
-    SL.Values['pass'] := '27rJ:rh,=C6v&gt;^';
-    SL.Values['host'] := 'mail.td-auto.ru';
-    SL.Values['port'] := '587';
+    HRTimer := THighResolutionStopwatch.Create;
+    try
+      //FileContent := 'unit test2; 1e-33.4 1.5.6 123e';
+      //FileContent := '(*$IFDEF X' + sLineBreak + 'Y*)z';
+      FileContent := '(*$IFDEF CONSOLE_TESTRUNNER ' {+ sLineBreak} + ' test123*)z' + sLineBreak + 'a := 1;{$ENDIF}';
+      //FileContent := '{$IFDEF test}abc{$ELSE}xyz{$ENDIF}';
 
-    Log('Text=' + SL.DelimitedText);
-    str := SL.Values['pass'];
-    Log('Pass=' + str);
+      try
+        Memo1.Lines.BeginUpdate;
+        try
+          HRTimer.Restart;
+          Lexer.SetData(FileContent);
+          while Lexer.TokenID <> tkEOF do
+          begin
+            CurrentToken := Lexer.TokenString;
+
+            DirectiveState := EmptyStr;
+            for i := Low(Lexer.LexerState.IfDirectiveStateArray) to High(Lexer.LexerState.IfDirectiveStateArray) do
+              DirectiveState := DirectiveState + COMMA_BOOL_ARRAY_SPACE[DirectiveState = EmptyStr]
+                  + GetEnumName(TypeInfo(TIfDirectiveState), Ord(Lexer.LexerState.IfDirectiveStateArray[i]));
+            DirectiveState := '[' + DirectiveState + ']';
+
+            Log(TOKEN_NAMES[Lexer.TokenID]
+                + '(' + IfThen(Lexer.TokenID in [tkCRLF, tkCRLFComment], '', CurrentToken)
+                + ')' (*+ '  BeginEnd=' + IntToStr(Lexer.LexerState.Counters.BeginEndCount)*) + '  LineNo=' + IntToStr(Lexer.LexerState.CurrentLine)
+                + '  IfDirCount=' + IntToStr(Lexer.LexerState.Counters.IfDirectiveCount)
+                + '  IfDifValues=' + DirectiveState
+                //+ '  BlockState=' + Lexer.LexerState.GetCurrentBlockTypeState
+                );
+            {Log(TOKEN_NAMES[Lexer.TokenID]);
+            Log(IfThen(Lexer.TokenID in [tkCRLF, tkCRLFComment], '', CurrentToken));
+            Log('BeginEnd=' + IntToStr(Lexer.LexerState.Counters.BeginEndCount));
+            Log('LineNo=' + IntToStr(Lexer.LexerState.CurrentLine));
+            Log('IfDirCount=' + IntToStr(Lexer.LexerState.Counters.IfDirectiveCount)); }
+            Application.ProcessMessages;
+
+            //if Lexer.TokenID = tkImplementation then Break;
+
+            Lexer.NextToken;
+          end;
+          Elapsed := HRTimer.ElapsedMicroseconds;
+        finally
+          Memo1.Lines.EndUpdate;
+        end;
+      except
+        on E: EPasLexerException do
+        begin
+          Log('LineNo=' + IntToStr(E.LineNumber));
+          Log('LineCharIndex=' + IntToStr(E.LineCharIndex));
+          Log('CurrentToken=' + TOKEN_NAMES[E.CurrentToken]);
+          raise;
+        end;
+      end;
+
+      Log('TimeMicro: ' + IntToStr(Elapsed));
+      //Log('BeginEndCount=' + IntToStr(Lexer.LexerState.Counters.BeginEndCount));
+      Log('RoundCount=' + IntToStr(Lexer.LexerState.Counters.RoundCount));
+      Log('SquareCount=' + IntToStr(Lexer.LexerState.Counters.SquareCount));
+      Log('IfDirectiveCount=' + IntToStr(Lexer.LexerState.Counters.IfDirectiveCount));
+    finally
+      HRTimer.Free;
+    end;
   finally
-    SL.Free;
+    Lexer.Free;
   end;
+
+  Log('DONE');
+end;
+
+procedure TfmMainTest.Button11Click(Sender: TObject);
+begin
+  try
+    raise EPasLexerException.Create('Test message', nil);
+  except
+    on E: Exception do
+      Log('Exception: ' + E.Message);
+    on E: EPasLexerException do
+      Log('EPasLexerException: ' + E.Message);
+
+  end;
+
+  Log('DONE');
 end;
 
 procedure TfmMainTest.Button1Click(Sender: TObject);
@@ -182,7 +257,7 @@ begin
         //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\VirtualTrees.pas';
         //FileName := 'C:\AirusTT\Source\AirusTT_Lib\CallbackSrv_TLB.pas';
         //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\BeginEndCountTestUnit2.pas';
-        //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\TestPasHi.pas';
+        FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\TestPasHi.pas';
         //FileName := 'C:\AirusTT\Source\AirusTT_Lib\N_BIOS.pas';
         //FileName := 'C:\AirusTT\Source\Libraries\EhLib110\Lazarus\Lib\DefaultItemsCollectionEditorsEh.pas';
         //FileName := 'C:\AirusTT\Source\SrvSite\Tovs.Exchange.HTTP.pas';
@@ -197,7 +272,7 @@ begin
         //FileName := 'C:\AirusTT\Source\Modules\OTK\N_InsuranceIncident.pas';
         //FileName := 'C:\AirusTT\Source\Libraries\EhLib91\PropFilerEh.pas';
         //FileName := 'C:\AirusTT\Source\AirusTT_Lib\aiTimer.pas';
-        FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\EmptyUnit.pas';
+        //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\EmptyUnit.pas';
 
         //StrStream.LoadFromFile(FileName);
         //FileContent := StrStream.DataString;
@@ -548,7 +623,7 @@ var
   //i: Integer;
   CurState: TPasLexerMinimalState;
   Elapsed: Int64;
-  CurError: TParseErrorItem;
+  //CurError: TParseErrorItem;
   //FileStream: TFileStream;
   Root: TBaseLexemeNode;
 begin
@@ -561,7 +636,7 @@ begin
       //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\VirtualTrees.pas';
       //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\TestPasHi.pas';
 
-      DataString := TPasParser.GetFileDataString(FileName);
+      //DataString := TPasParser.GetFileDataString(FileName);
 
       HRTimer.Restart;
       if not Parser.ParseString(DataString) then

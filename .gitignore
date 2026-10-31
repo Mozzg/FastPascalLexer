@@ -84,3 +84,5 @@ UnitTests/TestData/VirtualTrees.pas
 UnitTests/TestData/VirtualTrees_cleared.pas
 links.txt
 /Source/ThirdParty/FastMM5
+/.agents
+skills-lock.json

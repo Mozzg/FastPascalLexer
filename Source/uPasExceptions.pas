@@ -100,10 +100,7 @@ end;
 constructor EPasLexerException.Create(const AMessage: string; ALexer: TPasLexer = nil);
 begin
   if not Assigned(ALexer) then
-  begin
-    if (FLineNumber = 0) and (FLineCharIndex = 0) then
-      FCurrentToken := tkUnknown;
-  end
+    FCurrentToken := tkUnknown
   else
   begin
     FLineNumber := ALexer.LexerState.CurrentLine;

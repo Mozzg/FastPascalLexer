@@ -637,6 +637,7 @@ begin
   FParserStateRecord.SkipUnsignificantTokens;
   while StatesCurrentIndexToken <> tkImplementation do
   begin
+    NewNode := nil;
     case StatesCurrentIndexToken of
       tkConst: NewNode := TConstBlockLexemeNode.Create(Self, FParserStateRecord);
       tkResourcestring: FParserStateRecord.GetNextToken;
@@ -651,7 +652,8 @@ begin
           [GetTokenSetStringForOR([tkConst, tkResourcestring, tkType, tkVar, tkThreadvar, tkProcedure, tkFunction, tkExports]),
           TOKEN_NAMES[StatesCurrentIndexToken]], Self);
     end;
-    NewNode.ParseItself;
+    if Assigned(NewNode) then
+      NewNode.ParseItself;
     FParserStateRecord.SkipUnsignificantTokens;
   end;
 end;
@@ -679,6 +681,7 @@ begin
   FParserStateRecord.SkipUnsignificantTokens;
   while not(StatesCurrentIndexToken in [tkInitialization, tkFinalization, tkBegin, tkUnitEnd]) do
   begin
+    NewNode := nil;
     case StatesCurrentIndexToken of
       tkLabel: FParserStateRecord.GetNextToken;
       tkConst: NewNode := TConstBlockLexemeNode.Create(Self, FParserStateRecord);
@@ -698,7 +701,8 @@ begin
           tkFunction, tkConstructor, tkDestructor, tkClass, tkExports]),
           TOKEN_NAMES[StatesCurrentIndexToken]], Self);
     end;
-    NewNode.ParseItself;
+    if Assigned(NewNode) then
+      NewNode.ParseItself;
     FParserStateRecord.SkipUnsignificantTokens;
   end;
 end;
