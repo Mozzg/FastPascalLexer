@@ -9,13 +9,38 @@ tokenization speed. Every change must respect that goal.
 
 Repository layout:
 
-- `Source/` — production units (`uPasLexer.pas`, `uPasLexerTypes.pas`,
-  `uPasParser.pas`, `uPasParserGrammar.pas`, `uPasParserTypes.pas`,
-  `uPasParserSettings.pas`, `uPasExceptions.pas`, `uPasLexerPerformance.pas`)
-  and the bundled third-party memory manager under `Source/ThirdParty/FastMM5/`.
+- `Source/` — production units:
+  - `uPasLexer.pas`, `uPasLexerTypes.pas` — the lexer `TPasLexer`, token kinds
+    and the keyword table.
+  - `uPasParser.pas`, `uPasParserGrammar.pas`, `uPasParserTypes.pas` — the
+    parser (work in progress, see section 3).
+  - `uPasExceptions.pas` — lexer and parser exception classes.
+  - `uPasParserSettings.pas` — a stub for future parser settings; not used yet.
+  - `uPasLexerPerformance.pas` — measurement tools (`THighResolutionStopwatch`,
+    `TMeasureThread`) used by TestApp; not part of the lexer.
+  - `ThirdParty/FastMM5/` — the FastMM5 memory manager, a git submodule
+    (`pleriche/FastMM5`, pinned commit) used by TestApp.
 - `TestApp/` — VCL GUI test/benchmark application (`TestApp.dpr`).
-- `UnitTests/` — DUnit test project (`PasLexerTests.dpr`) and test data.
-- `PascalLexerGroup.groupproj` — the group project, the repository entry point.
+- `UnitTests/` — DUnit test project (`PasLexerTests.dpr`), test units and
+  `TestData/`.
+- `Benchmark/` — console benchmark of the lexer speed (`LexerBenchmark.dpr`,
+  see section 5).
+- `build.cmd`, `test.cmd` — build and test scripts (see section 5).
+- `PascalLexerGroup.groupproj` — the group project (TestApp, PasLexerTests,
+  LexerBenchmark), the repository entry point.
+
+Fresh clone setup:
+
+1. Fetch the FastMM5 submodule (TestApp does not compile without it; the unit
+   tests do): `git submodule update --init`, or clone with
+   `--recurse-submodules`.
+2. The benchmarks (`LexerBenchmark` and TestApp's "Start time test") read
+   `UnitTests/TestData/VirtualTrees.pas` (VirtualTreeView 5.3.0, ~1.4 MB,
+   MPL 1.1 / LGPL), which is not stored in the repository. Download it into
+   `UnitTests/TestData/`:
+   `https://raw.githubusercontent.com/JAM-Software/Virtual-TreeView/V5.3.0/Source/VirtualTrees.pas`.
+   Without the file everything else works; the benchmarks only report that
+   the file is missing.
 
 ---
 
@@ -82,7 +107,7 @@ Repository layout:
 - Continued lines are indented **4 spaces** to distinguish them from a 2-space block indent (see the `if` example).
 - When wrapping an `if` condition, put `then` on its own line so the end of the condition is visible.
 - On a wrapped expression, binary/arithmetic/logical operators begin the next line rather than ending the previous one; exception: `,` and `;` stay at the end of the previous line.
-- Do not split method headers across lines; restructure instead (e.g. fewer parameters).
+- Avoid splitting method headers across lines: preferably restructure the header so it fits (e.g. fewer parameters, shorter names or directives). When restructuring is not reasonable, a header may be wrapped: break after the `;` between parameters or before the directives, with continuation lines indented 4 spaces.
 - Blank lines may separate logical blocks, but never two or more in a row.
 - Blocks that receive extra indent (`begin-end`, `asm`, `try-*`, `var`/class sections, etc.) — except nested functions — must not start or end with a blank line.
 - Occasional extra spaces for readability are allowed but must not be abused.
@@ -158,9 +183,139 @@ Repository layout:
 
 ---
 
-## 2. Performance focus
+## 2. Project-specific rules
 
-This is a lexer where per-byte speed matters. Follow these rules in `Source/`:
+Section 1 is the company-wide coding standard and is kept verbatim. The rules
+below add project-specific details and exceptions; where they differ from
+section 1, they take precedence.
+
+### Exceptions to section 1
+
+- **DUnit test names.** Test units are named `Test<UnitName>` (e.g.
+  `TestuPasLexer`) and test classes `Test<ClassName>` (e.g. `TestTPasLexer`),
+  following the DUnit wizard convention instead of the `u`/`T` prefix rules.
+- **TestApp has no main application class.** TestApp is an internal test
+  stand; its state may live in the form (`TfmMainTest`).
+- **Parameter prefix `A`** is mandatory for every parameter, except when a
+  method overrides or mirrors an RTL/VCL signature: `Sender` in event
+  handlers, `Msg`/`Args` as in `Exception.CreateFmt`, `Value` in
+  IDE-generated property setters.
+- **Comment language.** Comments may be written in English or Russian.
+  Identifiers stay English (section 1).
+
+### Additional rules
+
+- **Line length.** In new and modified code a line must not exceed 140
+  characters (a hard limit). Do not rewrap existing long lines the task does
+  not touch.
+- **No inline variables.** Inline `var` declarations inside a block and
+  `for var` loops are forbidden; declare all locals at the start of the
+  method.
+- **Language features on the lexer hot path.** Generics and anonymous methods
+  are allowed in general, but not on the lexer hot path (`NextToken*` and the
+  `*Handler` methods): no anonymous methods there (they allocate and are
+  called through an interface) and no generic collections — only the existing
+  `TArray<>` fields of `TPasLexerState`.
+
+### Wrapping long lines
+
+Examples of the wrapping rules of section 1. Every continuation line is
+indented **4 spaces** relative to the first line of the statement (all
+continuation lines of one statement use the same indent, it does not grow);
+binary and logical operators start the continuation line, while `,` stays at
+the end of the wrapped line.
+
+Wrapped `if` condition — `then` on its own line, at the indent of `if`:
+
+```pascal
+  if (FLexerState.CurrentToken in CONDITIONAL_TOKENS)
+      and (Length(FLexerState.IfDirectiveStateArray) > 0)
+  then
+  begin
+    ...
+  end;
+```
+
+Wrapped parameter list — the line ends with `,`:
+
+```pascal
+      raise EBenchmarkError.Create(EXIT_CODE_LEXER_FAILURE,
+          Format(EMESSAGE_LEXER_EXCEPTION, [FLexer.LexerState.CurrentLine, E.ClassName, E.Message]));
+```
+
+Multi-line string constant — the value starts on the line of `=`, `+` starts
+each continuation line:
+
+```pascal
+  EMESSAGE_FILE_NOT_FOUND = 'Input file "%s" does not exist.'
+      + sLineBreak + 'Download VirtualTrees.pas into UnitTests\TestData,'
+      + sLineBreak + 'or pass another Pascal source with -file <path>.';
+```
+
+Wrong — a 2-space continuation looks like a nested block, and the operator
+hides at the end of the line:
+
+```pascal
+  EMESSAGE_FILE_NOT_FOUND =
+    'Input file "%s" does not exist.' + sLineBreak +
+    'or pass another Pascal source with -file <path>.';
+```
+
+### Files not to change
+
+- `Source/ThirdParty/` — third-party code (git submodule). Do not edit it;
+  move the submodule to another upstream commit only when asked.
+- `UnitTests/TestData/` — test input. The files intentionally contain unusual
+  or non-standard code; do not fix or reformat them. Adding new test data
+  files is fine.
+- `*.dproj`, `*.groupproj` — edit only surgically (unit list, options); never
+  reformat or regenerate them. When adding or removing a unit, change the
+  `.dpr` `uses` clause and the `.dproj` `DCCReference` list together. Do not
+  edit `*.res` files. A build may rewrite the tracked `*.res` files (version
+  info); unless the task is about resources, restore them with
+  `git checkout -- <file>.res` after building.
+- IDE local state — `*.local`, `*.identcache`, `__history/`, `__recovery/`:
+  do not create, modify or delete.
+- License texts — `LICENSE` and the header comment blocks of units (author,
+  license, version): do not change or remove.
+
+---
+
+## 3. Lexer and parser
+
+### Lexer contract
+
+Read `README.md` before changing lexer behavior: it explains that whitespace
+and comment tokens are emitted by design and that `SetData` already produces
+the first token. In addition:
+
+- **The lexer does not own its input.** `SetData(var ADataString: string)`
+  stores a raw pointer into the caller's string. The string must stay alive
+  and unmodified until lexing is finished.
+- **End of input is the terminating `#0`** of the Delphi string (`#0` is
+  dispatched to `NullHandler`, which yields `tkEOF`); a `#0` inside the text
+  also ends tokenization.
+
+### Parser (work in progress)
+
+`TPasParser` (`uPasParser.pas`) loads a file or a string (`ParseFile`,
+`ParseString`), feeds it to its own `TPasLexer` and builds a tree of grammar
+nodes derived from `TBaseLexemeNode` (`uPasParserGrammar.pas`). Shared types
+live in `uPasParserTypes.pas`; errors are raised with the exception classes
+from `uPasExceptions.pas`. The parser is under active development and is not
+covered by unit tests yet (the tests use only `TPasParser.GetFileDataString`).
+
+### Performance rules
+
+Raw tokenization speed is the main design goal. The rules below are mandatory
+for the lexer (`uPasLexer.pas`, `uPasLexerTypes.pas`), above all for its hot
+path. The parser may allocate (it creates tree nodes) and use virtual methods,
+but must avoid needless work.
+
+**Measure every change of the lexer hot path** with the console benchmark
+(section 5, "Measuring lexer speed"): run it before and after the change and
+put both `MedianMs` values into your report. The change must not raise
+`MedianMs` beyond run-to-run noise.
 
 - **No allocations on the hot path.** `NextToken` and all `*Handler` methods
   must not allocate strings, objects, or dynamic arrays. Token text is produced
@@ -188,20 +343,102 @@ This is a lexer where per-byte speed matters. Follow these rules in `Source/`:
   message strings instead of building them per call.
 - **Do not add indirection that a benchmark would notice** — no interfaces,
   virtual calls, or RTTI in the lexing loop.
+- **Keep the 64-bit build in mind.** Both Win32 and Win64 are built and
+  tested; use `NativeInt`/`NativeUInt` for pointer-sized values and never
+  cast pointers to `Integer`/`Cardinal`.
 - **Keep memory manager in mind.** TestApp links FastMM5
   (`Source/ThirdParty/FastMM5/FastMM5.pas`); performance measurements and
   allocations are done with `THighResolutionStopwatch` /
   `TMeasureThread` (`uPasLexerPerformance.pas`). Keep the lexer itself
   allocation-free so these measurements stay meaningful.
-- When you change tokenizer behavior, run the full unit test suite (see below)
-  — `UnitTests/TestuPasLexerAdditional.pas` exercises most handlers and the
-  prefix-tree keyword path.
 
 ---
 
-## 3. Building the project (msbuild, current environment)
+## 4. Tests
 
-Environment (this machine):
+- Every change of lexer behavior and every bug fix comes with a test.
+- Tests on code fragments go into `UnitTests/TestuPasLexerAdditional.pas` and
+  use its helpers (`GetTokens`, `GetTokensNoJunk`, `CheckTokensEqual`,
+  `CheckTokenEquals`). Tests that read files from `UnitTests/TestData/` go
+  into `UnitTests/TestuPasLexer.pas`.
+- Test methods are named `Test<WhatIsChecked>` (e.g.
+  `TestNumbersExponentAndHex`) and declared in the `published` section.
+- Build test data paths relative to the executable, as the existing tests do:
+  `ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\<file>'`.
+- Do not delete or weaken existing tests without the user's consent. The
+  number of tests must not drop unless tests were removed on purpose.
+- `TestuPasLexerAdditional.pas` exercises most handlers and the prefix-tree
+  keyword path; run the full suite after every change (`test.cmd`, section 5),
+  on Win32 and, for low-level changes, on Win64 too.
+- The test project also compiles `uPasParserSettings.pas` and
+  `uPasLexerPerformance.pas` so that their compilation is checked; they have
+  no tests.
+
+---
+
+## 5. Building and running
+
+### Scripts (preferred)
+
+Two scripts in the repository root load the Delphi environment and call
+MSBuild. They work from cmd, PowerShell (`.\test.cmd`) and Git Bash
+(`./test.cmd`), and the current directory does not matter.
+
+- `test.cmd [Platform]` — builds `UnitTests\PasLexerTests.dproj` in the
+  `Console` configuration and runs the tests. `Platform` is `Win32`
+  (default) or `Win64`.
+- `build.cmd [Project] [Config] [Platform]` — builds one project. `Project`
+  is a path relative to the repository root, with `\` or `/` separators
+  (default `PascalLexerGroup.groupproj`); `Config` is `Debug` (default),
+  `Release` or `Console` (tests only); `Platform` is `Win32` (default) or
+  `Win64`. Example: `build.cmd TestApp/TestApp.dproj Debug Win64`.
+- Exit code 0 means success. On another machine set `DELPHI_RSVARS` (path to
+  `rsvars.bat` of Delphi 11) and `MSBUILD_EXE` (path to `MSBuild.exe`).
+
+**Agents run the tests only through `test.cmd` (or a `Console` build).** The
+`Debug` and `Release` configurations of `PasLexerTests` build the DUnit GUI
+runner: running that executable opens a window and blocks the session. Those
+configurations are for interactive use in the IDE.
+
+### Test result
+
+- Success: `test.cmd` exits with code 0 and the output ends with
+  `OK: N tests`.
+- Failure: a nonzero exit code — either the build failed (`test.cmd` prints
+  "the build failed") or the runner halted with exit code Errors + Failures;
+  the output lists each error and failure after `There was N failure` /
+  `There were N errors`.
+- Test data is located relative to the executable, so `PasLexerTests.exe` must
+  stay in `Exe\`; the current directory does not matter.
+
+### Measuring lexer speed
+
+`Benchmark\LexerBenchmark.dproj` is a console benchmark (FastMM5 linked, like
+TestApp). Each pass is `SetData` + `while NextToken do` over the whole text,
+without `TokenString`. A validation pass checks that the text is tokenized
+without errors, then warm-up passes and measured passes run at high process
+priority, and every measured pass must yield the same token count.
+
+- Build in `Release Win32` — the variant to compare numbers in:
+  `build.cmd Benchmark/LexerBenchmark.dproj Release Win32`.
+- Run `Exe\LexerBenchmark.exe` (defaults: 10 warm-up + 200 measured passes
+  over `UnitTests\TestData\VirtualTrees.pas`, about 1 s). Switches (`-` or
+  `/`, value as the next parameter or after `:`): `-file <path>`,
+  `-iterations <n>`, `-warmup <n>`, `-help`.
+- Output: one `Key: Value` line each (`Build`, `Priority`, `File`,
+  `FileSizeBytes`, `Characters`, `Tokens`, `WarmupPasses`, `Iterations`,
+  `MinMs`, `MedianMs`, `MeanMs`, `MaxMs`, `MedianMBPerSecond`,
+  `MedianMTokensPerSecond`), ending with `Result: OK`. Compare `MedianMs`
+  (lower is better); back-to-back runs differ by about 0.1-1 %.
+- Exit codes: 0 success, 1 input file not found, 2 invalid parameter,
+  3 lexer error (exception, unbalanced counters or a changed token count),
+  4 unexpected error. On failure the error goes to stderr and stdout ends with
+  `Result: FAILED (exit code N)`.
+- The numbers are lower than TestApp's "Start time test", which also calls
+  `TokenString` for every token. Compare only runs of the same build variant
+  on the same machine.
+
+### Environment (this machine)
 
 - Delphi 11 Alexandria installed at `C:\Program Files (x86)\Embarcadero\Studio\22.0`
   (also a Delphi 10.4 install at `...\Studio\21.0`; use 22.0).
@@ -213,76 +450,56 @@ Environment (this machine):
   Plain `msbuild` is **not** on PATH; always call it with the full path.
 - DUnit sources live at `$(BDS)\Source\DUnit\src` (the test project already
   adds this to `DCC_UnitSearchPath`).
-- Build outputs go to `DCU\<Platform><Config>` and `Exe\` per the `.dproj`
-  settings. Use the `workdir` of the repository root when building.
 
-### Prerequisite: load the Delphi environment
+### Calling MSBuild directly
 
-In PowerShell, run MSBuild inside a `cmd` context that sources `rsvars.bat`,
-otherwise `$(BDS)` and the Delphi compiler targets are undefined. Example that
-builds the unit-test project (Debug, Win32):
-
-```powershell
-cmd /c "call ""C:\Program Files (x86)\Embarcadero\Studio\22.0\bin\rsvars.bat"" >nul 2>&1 && set PATH=%BDS%\bin;%PATH% && ""C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"" ""C:\GitHub Repos\FastPascalLexer\UnitTests\PasLexerTests.dproj"" /t:Build /p:Config=Debug /p:Platform=Win32 /v:minimal"
-```
-
-### Build the whole solution (group project)
-
-`PascalLexerGroup.groupproj` is the repository entry point and builds
-`TestApp` + `PasLexerTests`. Equivalent MSBuild targets:
+Only needed when the scripts do not fit. Run MSBuild inside a `cmd` context
+that sources `rsvars.bat`, otherwise `$(BDS)` and the Delphi compiler targets
+are undefined. PowerShell example that builds the unit tests for automated
+runs (Console, Win32):
 
 ```powershell
-cmd /c "call ""C:\Program Files (x86)\Embarcadero\Studio\22.0\bin\rsvars.bat"" >nul 2>&1 && set PATH=%BDS%\bin;%PATH% && ""C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"" ""C:\GitHub Repos\FastPascalLexer\PascalLexerGroup.groupproj"" /t:Build /p:Config=Debug /p:Platform=Win32 /v:minimal"
+cmd /c "call ""C:\Program Files (x86)\Embarcadero\Studio\22.0\bin\rsvars.bat"" >nul 2>&1 && set PATH=%BDS%\bin;%PATH% && ""C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"" ""C:\GitHub Repos\FastPascalLexer\UnitTests\PasLexerTests.dproj"" /t:Build /p:Config=Console /p:Platform=Win32 /v:minimal"
 ```
 
-Available group targets: `Build`, `Clean`, `Make`, plus per-project
-`TestApp`/`TestApp:Clean`/`TestApp:Make` and
-`PasLexerTests`/`PasLexerTests:Clean`/`PasLexerTests:Make`.
+The group project `PascalLexerGroup.groupproj` builds `TestApp`,
+`PasLexerTests` and `LexerBenchmark`. Available group targets: `Build`,
+`Clean`, `Make`, plus per-project `<Project>`, `<Project>:Clean` and
+`<Project>:Make` for each of the three projects.
 
-### Individual projects
+### Projects and configurations
 
-- **Unit tests:** `UnitTests\PasLexerTests.dproj` has three configurations.
-  `Debug` and `Release` build the visual DUnit GUI test runner window — use
-  them for interactive runs in the IDE. The `Console` configuration (based
-  on `Debug`) defines `CONSOLE_TESTRUNNER`, which makes `PasLexerTests.dpr`
-  compile as a console app and DUnit print text output — use it for
-  automated runs (agents, CI, build scripts).
-  Build with `Config=Debug|Release|Console`, `Platform=Win32` (or `Win64`).
-  Known compiler warnings (W1036 in `uPasParserGrammar.pas`) are pre-existing
-  and not errors.
-- **GUI test app:** `TestApp\TestApp.dproj` (VCL `AppType=Application`,
-  links FastMM5). Debug config defines `DEBUG` (enables
-  `ReportMemoryLeaksOnShutdown`); Release defines `RELEASE`.
-- Config/Platform variants: Debug/Release x Win32/Win64, all defined in the
-  `.dproj` files.
-
-### Run the tests
-
-Console mode (automation; build with `Config=Console`, then run):
-
-```powershell
-& "C:\GitHub Repos\FastPascalLexer\Exe\PasLexerTests.exe"
-```
-
-Expect a trailing line like `OK: 31 tests` (test count grows with the suite).
-The console runner prints per-test progress dots and the failure/error summary;
-nonzero output means a failing suite. `TestData/` files are read relative to
-the repo layout at runtime — run from the repository root.
-
-GUI mode (interactive; build with `Config=Debug|Release`, then run the same
-`Exe\PasLexerTests.exe`):
-
-```powershell
-& "C:\GitHub Repos\FastPascalLexer\Exe\PasLexerTests.exe"
-```
-
-The DUnit window shows the test tree, runs the suite with a click, and reports
-failures visually. Both configurations write the same `Exe\PasLexerTests.exe`,
-so the last built configuration wins: build the configuration you intend to
-run right before running it.
+- **Unit tests:** `UnitTests\PasLexerTests.dproj` — configurations `Debug`,
+  `Release` (GUI runner) and `Console` (based on `Debug`, defines
+  `CONSOLE_TESTRUNNER`: console app, text output, exit code), platforms
+  `Win32` and `Win64`. Builds without compiler warnings.
+- **GUI test app:** `TestApp\TestApp.dproj` (VCL, links FastMM5) —
+  configurations `Debug` (defines `DEBUG`, enables
+  `ReportMemoryLeaksOnShutdown`) and `Release` (defines `RELEASE`), platforms
+  `Win32` and `Win64`. Do not add files from `UnitTests\TestData\` to a
+  project: they are test input and may not compile in every configuration.
+- **Console benchmark:** `Benchmark\LexerBenchmark.dproj` — configurations
+  `Debug` and `Release` (default), platforms `Win32` and `Win64`.
+- All configurations and platforms write the executables to the same `Exe\`
+  folder, so the last build wins: build the variant you intend to run right
+  before running it. DCUs go to `DCU\<Platform><Config>\`.
 
 ### After a build
 
-- Outputs land in `Exe\` (`TestApp.exe`, `PasLexerTests.exe`) and DCUs in
-  `DCU\<Platform><Config>\`. These are generated artifacts; do not commit them.
+- Outputs in `Exe\` and `DCU\` are generated artifacts; do not commit them.
 - Keep line endings CRLF in any source file you touch (see section 1).
+
+---
+
+## 6. Git workflow
+
+- **Always ask before committing or pushing.** Before any `git commit` or
+  `git push` (including `--amend`, merge commits and pushed tags), show the
+  user the repository, branch, files to be committed and the commit message,
+  and wait for an explicit "yes" in chat. One approval covers one commit only.
+- Do not stage (`git add`) files the user has not asked to commit.
+- Never commit build outputs (`Exe\`, `DCU\`) or agent docs (`AGENTS.md`,
+  `CLAUDE.md`) unless the user explicitly asks for it.
+- FastMM5 is a submodule: never commit changes inside
+  `Source/ThirdParty/FastMM5`. When the pinned commit changes after a pull,
+  run `git submodule update --init`.

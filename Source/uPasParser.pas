@@ -17,8 +17,8 @@
 *  Created: 16.03.2025                                                         *
 *  Class: TPasParser                                                           *
 *  Description: Pascal source code parser based on TPasLexer tokenizer/lexer   *
-*  Version: 0.2                                                                *
-*  Last modified: 10.05.2025                                                   *
+*  Version: 0.3                                                                *
+*  Last modified: 01.11.2026                                                   *
 *  Contributor(s):                                                             *
 *    Pervov Evgeny <operationm@list.ru>                                        *
 *******************************************************************************)
@@ -339,7 +339,7 @@ begin
         WasSignificantToken := False;
         WasNotAddedToken := False;
       end
-      else if not(InitialTokens[i].CurrentToken in UNSIGNIFICANT_TOKENS)
+      else if not(InitialTokens[i].CurrentToken in INSIGNIFICANT_TOKENS)
           and AddTokenFlags[i]
       then
         WasSignificantToken := True;
@@ -466,7 +466,7 @@ var
   WasError: Boolean;
 begin
   if not FileExists(AFileName) then
-    raise Exception.CreateFmt('File does not exists (%s)', [AFileName]);
+    raise EPasParserException.CreateFmt(EMESSAGE_FILE_DOES_NOT_EXISTS, [AFileName]);
 
   MemStream := TMemoryStream.Create;
   try
@@ -480,7 +480,9 @@ begin
 
     DataEncoding := TryGetEncodingByPreamble(MemStream);
 
-    if not Assigned(DataEncoding) then
+    if Assigned(DataEncoding) then
+      DataStartPosition := MemStream.Position
+    else
     begin
       BufferSize := Min(MAX_BUFFER_SIZE, MemStream.Size);
       SetLength(Buffer, BufferSize);
@@ -495,9 +497,7 @@ begin
         DataEncoding := TEncoding.BigEndianUnicode
       else
         DataEncoding := TEncoding.UTF8;
-    end
-    else
-      DataStartPosition := MemStream.Position;
+    end;
 
     if DataEncoding.IsSingleByte then
       SecondaryEncoding := TEncoding.UTF8
@@ -546,7 +546,8 @@ begin
       Result := TEncoding.Unicode.GetString(ConvertedBuffer);
       Exit;
     except
-      raise Exception.Create('Failed to read file');
+      on E: Exception do
+        raise EPasParserException.CreateFmt(EMESSAGE_FAILED_TO_READ_FILE, [AFileName, E.Message]);
     end;
   finally
     MemStream.Free;

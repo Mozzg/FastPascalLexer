@@ -6,7 +6,7 @@
         <Base>True</Base>
         <Config Condition="'$(Config)'==''">Debug</Config>
         <Platform Condition="'$(Platform)'==''">Win32</Platform>
-        <TargetedPlatforms>1</TargetedPlatforms>
+        <TargetedPlatforms>3</TargetedPlatforms>
         <AppType>Application</AppType>
         <MainSource>PasLexerTests.dpr</MainSource>
     </PropertyGroup>
@@ -119,6 +119,8 @@
         <DCCReference Include="..\Source\uPasExceptions.pas"/>
         <DCCReference Include="..\Source\uPasParserTypes.pas"/>
         <DCCReference Include="..\Source\uPasParserGrammar.pas"/>
+        <DCCReference Include="..\Source\uPasParserSettings.pas"/>
+        <DCCReference Include="..\Source\uPasLexerPerformance.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -995,7 +997,7 @@
             </Deployment>
             <Platforms>
                 <Platform value="Win32">True</Platform>
-                <Platform value="Win64">False</Platform>
+                <Platform value="Win64">True</Platform>
             </Platforms>
             <UnitTesting>
                 <TestFramework>DUnit / Delphi Win32</TestFramework>

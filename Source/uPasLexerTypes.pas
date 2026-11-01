@@ -16,8 +16,8 @@
 *  Author: Pervov Evgeny                                                       *
 *  Created: 16.03.2025                                                         *
 *  Description: Various types for pascal tokenizer/lexer TPasLexer             *
-*  Version: 0.2                                                                *
-*  Last modified: 10.05.2025                                                   *
+*  Version: 0.3                                                                *
+*  Last modified: 01.11.2026                                                   *
 *  Contributor(s):                                                             *
 *    Pervov Evgeny <operationm@list.ru>                                        *
 *******************************************************************************)
@@ -25,6 +25,10 @@
 unit uPasLexerTypes;
 
 interface
+
+const
+  DELPHI_KEYWORDS_COUNT = 133;
+  LATIN_LETTERS_COUNT = 26;
 
 type
   TTokenKind = (
@@ -242,7 +246,7 @@ type
   PPrefixTreeNode = ^TPrefixTreeNode;
   TPrefixTreeNode = record
     CurrentTokenKind: TTokenKind;
-    NextCharPointers: array[0..26] of PPrefixTreeNode;
+    NextCharPointers: array[0..LATIN_LETTERS_COUNT] of PPrefixTreeNode;
   end;
 
 const
@@ -256,13 +260,13 @@ const
   METHOD_TOKENS: TTokenKindSet = [tkProcedure, tkFunction, tkConstructor, tkDestructor, tkOperator];
   CONDITIONAL_TOKENS: TTokenKindSet = [tkIfDefDirective, tkIfNDefDirective, tkIfOptDirective, tkElseIfDirective,
       tkEndIfDirective, tkIfEndDirective];
-  UNSIGNIFICANT_TOKENS: TTokenKindSet = [tkCurlyComment, tkSingleLineComment, tkStarParenComment, tkCRLF, tkCRLFComment,
+  INSIGNIFICANT_TOKENS: TTokenKindSet = [tkCurlyComment, tkSingleLineComment, tkStarParenComment, tkCRLF, tkCRLFComment,
       tkSpace];
-  DIRECTIVE_UNSIGNIFICANT_TOKENS: TTokenKindSet = [tkCurlyComment, tkSingleLineComment, tkStarParenComment,
+  DIRECTIVE_INSIGNIFICANT_TOKENS: TTokenKindSet = [tkCurlyComment, tkSingleLineComment, tkStarParenComment,
       tkCompilerDirective, tkCRLF, tkCRLFComment, tkSpace];
 
-  DELPHI_KEYWORDS: array[0..132] of TKeywordRec = (
-    (Word: 'and';            Token: tkAnd), // reserve words start
+  DELPHI_KEYWORDS: array[0..DELPHI_KEYWORDS_COUNT - 1] of TKeywordRec = (
+    (Word: 'and';            Token: tkAnd), // reserved words start
     (Word: 'array';          Token: tkArray),
     (Word: 'as';             Token: tkAs),
     (Word: 'asm';            Token: tkAsm),
@@ -325,7 +329,7 @@ const
     (Word: 'var';            Token: tkVar),
     (Word: 'while';          Token: tkWhile),
     (Word: 'with';           Token: tkWith),
-    (Word: 'xor';            Token: tkXor), // reserve words end
+    (Word: 'xor';            Token: tkXor), // reserved words end
     (Word: 'absolute';       Token: tkAbsolute), // directives start
     (Word: 'abstract';       Token: tkAbstract),
     (Word: 'assembler';      Token: tkAssembler),

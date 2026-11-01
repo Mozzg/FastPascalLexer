@@ -12,7 +12,8 @@
   - Console (based on Debug) defines "CONSOLE_TESTRUNNER", which enables the
     APPTYPE CONSOLE directive below, so the executable is a console
     application and DUnit prints text output — the automated (agent/CI) way
-    to run the tests.
+    to run the tests. The console runner halts with exit code
+    Errors + Failures, so a nonzero exit code means a failing suite.
 }
 
 (*$IFDEF DEBUG
@@ -25,6 +26,7 @@
 
 uses
   DUnitTestRunner,
+  TextTestRunner,
   uPasLexer in '..\Source\uPasLexer.pas',
   uPasLexerTypes in '..\Source\uPasLexerTypes.pas',
   uPasParser in '..\Source\uPasParser.pas',
@@ -32,11 +34,18 @@ uses
   TestuPasLexerAdditional in 'TestuPasLexerAdditional.pas',
   uPasExceptions in '..\Source\uPasExceptions.pas',
   uPasParserTypes in '..\Source\uPasParserTypes.pas',
-  uPasParserGrammar in '..\Source\uPasParserGrammar.pas';
+  uPasParserGrammar in '..\Source\uPasParserGrammar.pas',
+  uPasParserSettings in '..\Source\uPasParserSettings.pas',
+  uPasLexerPerformance in '..\Source\uPasLexerPerformance.pas';
 
 {$R *.RES}
 
 begin
+  {$IFDEF CONSOLE_TESTRUNNER}
+  // Halts with exit code Errors + Failures when the suite fails
+  TextTestRunner.RunRegisteredTests(rxbHaltOnFailures).Free;
+  {$ELSE}
   DUnitTestRunner.RunRegisteredTests;
+  {$ENDIF}
 end.
 

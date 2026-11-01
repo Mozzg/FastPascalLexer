@@ -7,14 +7,11 @@ uses
   uPasLexer in '..\Source\uPasLexer.pas',
   uPasLexerTypes in '..\Source\uPasLexerTypes.pas',
   uPasParser in '..\Source\uPasParser.pas',
-  BeginEndCountTestUnit1 in '..\UnitTests\TestData\BeginEndCountTestUnit1.pas',
-  BeginEndCountTestUnit2 in '..\UnitTests\TestData\BeginEndCountTestUnit2.pas',
   uPasLexerPerformance in '..\Source\uPasLexerPerformance.pas',
   uPasExceptions in '..\Source\uPasExceptions.pas',
   uPasParserTypes in '..\Source\uPasParserTypes.pas',
   uPasParserGrammar in '..\Source\uPasParserGrammar.pas',
-  uPasParserSettings in '..\Source\uPasParserSettings.pas',
-  EmptyUnit in '..\UnitTests\TestData\EmptyUnit.pas';
+  uPasParserSettings in '..\Source\uPasParserSettings.pas';
 
 {$R *.res}
 

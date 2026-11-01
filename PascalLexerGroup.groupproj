@@ -9,6 +9,9 @@
         <Projects Include="UnitTests\PasLexerTests.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="Benchmark\LexerBenchmark.dproj">
+            <Dependencies/>
+        </Projects>
     </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Default.Personality.12</Borland.Personality>
@@ -35,14 +38,23 @@
     <Target Name="PasLexerTests:Make">
         <MSBuild Projects="UnitTests\PasLexerTests.dproj" Targets="Make"/>
     </Target>
+    <Target Name="LexerBenchmark">
+        <MSBuild Projects="Benchmark\LexerBenchmark.dproj"/>
+    </Target>
+    <Target Name="LexerBenchmark:Clean">
+        <MSBuild Projects="Benchmark\LexerBenchmark.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="LexerBenchmark:Make">
+        <MSBuild Projects="Benchmark\LexerBenchmark.dproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="TestApp;PasLexerTests"/>
+        <CallTarget Targets="TestApp;PasLexerTests;LexerBenchmark"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="TestApp:Clean;PasLexerTests:Clean"/>
+        <CallTarget Targets="TestApp:Clean;PasLexerTests:Clean;LexerBenchmark:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="TestApp:Make;PasLexerTests:Make"/>
+        <CallTarget Targets="TestApp:Make;PasLexerTests:Make;LexerBenchmark:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

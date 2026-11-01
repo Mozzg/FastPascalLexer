@@ -17,8 +17,8 @@
 *  Created: 10.05.2025                                                         *
 *  Classes: THighResolutionStopwatch, TMeasureThread                           *
 *  Description: Classes for measuring performance of TPasLexer                 *
-*  Version: 0.1                                                                *
-*  Last modified: 10.05.2025                                                   *
+*  Version: 0.2                                                                *
+*  Last modified: 01.11.2026                                                   *
 *  Contributor(s):                                                             *
 *    Pervov Evgeny <operationm@list.ru>                                        *
 *******************************************************************************)
@@ -43,10 +43,10 @@ type
   // Custom High resolution stopwatch
   THighResolutionStopwatch = class(TObject)
   strict private
-    fTicksPerSecond: Int64;
-    fInverseTicksPerMilisecond: Double;
-    fInverseTicksPerMicrosecond: Double;
-    fInverseTicksPerNanosecond: Double;
+    FTicksPerSecond: Int64;
+    FInverseTicksPerMilisecond: Double;
+    FInverseTicksPerMicrosecond: Double;
+    FInverseTicksPerNanosecond: Double;
   private
     class var fPrecisionTimerInitialized: Boolean;
     class procedure InitPrecisionTimer;
@@ -73,7 +73,7 @@ type
     function Restart: Int64;
 
     // Precision sleep. Parameter is how many 100 nanosecond intervals to sleep.
-    class procedure SleepPrecise(const a100NanosecIntervalsCount: Int64);
+    class procedure SleepPrecise(const A100NanosecondIntervalsCount: Int64);
 
     // Elapsed
     property ElapsedTicks: Int64 read GetElapsedTicks;
@@ -114,33 +114,38 @@ type
 
 implementation
 
+const
+  MILLISECONDS_IN_SECOND = 1000;
+  MICROSECONDS_IN_SECOND = 1000000;
+  NANOSECONDS_IN_SECOND = 1000000000;
+
 var
-  ulTimeDeviceCaps: TTimeCaps;
-  ulTimePrecisionChanged: Boolean;
-  ulWaitableTimerHandle: Winapi.Windows.THandle;
+  TimeDeviceCaps: TTimeCaps;
+  TimePrecisionChanged: Boolean;
+  WaitableTimerHandle: Winapi.Windows.THandle;
 
 { THighResolutionStopwatch }
 
 constructor THighResolutionStopwatch.Create;
 begin
   inherited Create;
-  if (not QueryPerformanceFrequency(fTicksPerSecond)) or (not QueryPerformanceCounter(fCurrentTicks)) then
+  if (not QueryPerformanceFrequency(FTicksPerSecond)) or (not QueryPerformanceCounter(fCurrentTicks)) then
     raise Exception.CreateFmt(EMESSAGE_TIMER_NOT_AVAILABLE, [ClassName]);
   fStartTicks := fCurrentTicks;
-  fInverseTicksPerMilisecond := 1000 / fTicksPerSecond;
-  fInverseTicksPerMicrosecond := 1000000 / fTicksPerSecond;
-  fInverseTicksPerNanosecond := 1000000000 / fTicksPerSecond;
+  FInverseTicksPerMilisecond := MILLISECONDS_IN_SECOND / FTicksPerSecond;
+  FInverseTicksPerMicrosecond := MICROSECONDS_IN_SECOND / FTicksPerSecond;
+  FInverseTicksPerNanosecond := NANOSECONDS_IN_SECOND / FTicksPerSecond;
 end;
 
 class procedure THighResolutionStopwatch.InitPrecisionTimer;
 begin
-  ulWaitableTimerHandle := CreateWaitableTimer(nil, False, nil);
-  if ulWaitableTimerHandle = 0 then
+  WaitableTimerHandle := CreateWaitableTimer(nil, False, nil);
+  if WaitableTimerHandle = 0 then
     Exit;
-  if timeGetDevCaps(@ulTimeDeviceCaps, SizeOf(TTimeCaps)) = MMSYSERR_NOERROR then
-    if ulTimeDeviceCaps.wPeriodMin <> PRECISION_TIMER_MINIMUM_RESOLUTION then
+  if timeGetDevCaps(@TimeDeviceCaps, SizeOf(TTimeCaps)) = MMSYSERR_NOERROR then
+    if TimeDeviceCaps.wPeriodMin <> PRECISION_TIMER_MINIMUM_RESOLUTION then
       if timeBeginPeriod(PRECISION_TIMER_MINIMUM_RESOLUTION) = MMSYSERR_NOERROR then
-        ulTimePrecisionChanged := True;
+        TimePrecisionChanged := True;
   THighResolutionStopwatch.fPrecisionTimerInitialized := True;
 end;
 
@@ -157,22 +162,22 @@ end;
 
 function THighResolutionStopwatch.GetElapsedSeconds: Double;
 begin
-  Result := GetElapsedTicks / fTicksPerSecond;
+  Result := GetElapsedTicks / FTicksPerSecond;
 end;
 
 function THighResolutionStopwatch.GetElapsedMiliseconds: Int64;
 begin
-  Result := Floor(GetElapsedTicks * fInverseTicksPerMilisecond);
+  Result := Floor(GetElapsedTicks * FInverseTicksPerMilisecond);
 end;
 
 function THighResolutionStopwatch.GetElapsedMicroseconds: Int64;
 begin
-  Result := Floor(GetElapsedTicks * fInverseTicksPerMicrosecond);
+  Result := Floor(GetElapsedTicks * FInverseTicksPerMicrosecond);
 end;
 
 function THighResolutionStopwatch.GetElapsedNanoseconds: Int64;
 begin
-  Result := Floor(GetElapsedTicks * fInverseTicksPerNanosecond);
+  Result := Floor(GetElapsedTicks * FInverseTicksPerNanosecond);
 end;
 
 function THighResolutionStopwatch.GetCurrentTicks: Int64;
@@ -183,7 +188,7 @@ end;
 
 function THighResolutionStopwatch.GetCurrentSeconds: Double;
 begin
-  Result := GetCurrentTicks / fTicksPerSecond;
+  Result := GetCurrentTicks / FTicksPerSecond;
 end;
 
 procedure THighResolutionStopwatch.ResetToSystemStart;
@@ -198,15 +203,15 @@ begin
   fStartTicks := fCurrentTicks;
 end;
 
-class procedure THighResolutionStopwatch.SleepPrecise(const a100NanosecIntervalsCount: Int64);
- var
+class procedure THighResolutionStopwatch.SleepPrecise(const A100NanosecondIntervalsCount: Int64);
+var
   lWaitInterval100ns: Int64;
 begin
   if not THighResolutionStopwatch.fPrecisionTimerInitialized then
     raise Exception.Create(EMESSAGE_TIMER_NOT_INITIALIZED);
-  lWaitInterval100ns := a100NanosecIntervalsCount * -1;
-  if SetWaitableTimer(ulWaitableTimerHandle, lWaitInterval100ns, 0, nil, nil, False) then
-    if WaitForSingleObject(ulWaitableTimerHandle, INFINITE) = WAIT_FAILED then
+  lWaitInterval100ns := A100NanosecondIntervalsCount * -1;
+  if SetWaitableTimer(WaitableTimerHandle, lWaitInterval100ns, 0, nil, nil, False) then
+    if WaitForSingleObject(WaitableTimerHandle, INFINITE) = WAIT_FAILED then
       raise Exception.Create(EMESSAGE_TIMER_WAIT_FAILED);
 end;
 
@@ -329,17 +334,17 @@ end;
 
 initialization
   // Initializing variables for precision sleep
-  ulWaitableTimerHandle := 0;
-  ulTimePrecisionChanged := False;
+  WaitableTimerHandle := 0;
+  TimePrecisionChanged := False;
   // Initializing precision timer
   THighResolutionStopwatch.fPrecisionTimerInitialized := False;
   THighResolutionStopwatch.InitPrecisionTimer;
 
 finalization
   // Restoring and cleaning
-  if ulTimePrecisionChanged then
+  if TimePrecisionChanged then
     timeEndPeriod(THighResolutionStopwatch.PRECISION_TIMER_MINIMUM_RESOLUTION);
-  if ulWaitableTimerHandle <> 0 then
-    CloseHandle(ulWaitableTimerHandle);
+  if WaitableTimerHandle <> 0 then
+    CloseHandle(WaitableTimerHandle);
 
 end.

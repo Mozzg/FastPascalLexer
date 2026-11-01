@@ -232,7 +232,6 @@ begin
       Log('Exception: ' + E.Message);
     on E: EPasLexerException do
       Log('EPasLexerException: ' + E.Message);
-
   end;
 
   Log('DONE');
@@ -461,6 +460,12 @@ begin
 end;
 
 procedure TfmMainTest.Button4Click(Sender: TObject);
+const
+  BENCHMARK_FILE_NAME = '..\UnitTests\TestData\VirtualTrees.pas';
+  START_CAPTION = 'Start time test';
+  MISSING_FILE_MESSAGE = 'Benchmark file "%s" was not found. Download '
+      + 'https://raw.githubusercontent.com/JAM-Software/Virtual-TreeView/V5.3.0/Source/VirtualTrees.pas '
+      + 'into UnitTests\TestData.';
 var
   But: TButton;
   FileName: string;
@@ -475,7 +480,7 @@ begin
   else
   begin
     But.Tag := 0;
-    But.Caption := 'Start time test';
+    But.Caption := START_CAPTION;
     Log('Test stopped');
   end;
 
@@ -484,7 +489,15 @@ begin
 
   if But.Tag = 0 then Exit;
 
-  FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\VirtualTrees.pas';
+  FileName := ExtractFilePath(ParamStr(0)) + BENCHMARK_FILE_NAME;
+  if not FileExists(FileName) then
+  begin
+    But.Tag := 0;
+    But.Caption := START_CAPTION;
+    Log(Format(MISSING_FILE_MESSAGE, [FileName]));
+    Exit;
+  end;
+
   FMeasureThread := TMeasureThread.Create(FileName);
   FMeasureThread.OnUpdateElapsed := CustomOnUpdateElapsed;
   FMeasureThread.StartMeasure;

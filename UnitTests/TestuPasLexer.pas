@@ -12,7 +12,7 @@
 interface
 
 uses
-  TestFramework, System.SysUtils, System.Character, System.IOUtils, Winapi.Windows,
+  System.SysUtils, TestFramework,
   uPasLexer, uPasLexerTypes, uPasParser;
 
 type
@@ -87,7 +87,7 @@ begin
   repeat
     FPasLexer.TokenString;
     case FPasLexer.TokenID of
-      tkinterface:
+      tkInterface:
       begin
         if not WasInterface then
         begin
@@ -141,7 +141,7 @@ begin
   repeat
     FPasLexer.TokenString;
     case FPasLexer.TokenID of
-      tkinterface:
+      tkInterface:
       begin
         if not WasInterface then
         begin

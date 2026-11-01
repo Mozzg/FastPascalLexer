@@ -21,8 +21,8 @@
 *  Created: 16.03.2025                                                         *
 *  Class: TPasLexer                                                            *
 *  Description: Very fast pascal tokenizer/lexer                               *
-*  Version: 0.2                                                                *
-*  Last modified: 10.05.2025                                                   *
+*  Version: 0.3                                                                *
+*  Last modified: 01.11.2026                                                   *
 *  Contributor(s):                                                             *
 *    Pervov Evgeny <operationm@list.ru>                                        *
 *******************************************************************************)
@@ -321,13 +321,9 @@ begin
     case FStartPtr[FLexerState.CurrentIndex] of
       '''':
       begin
-        if FStartPtr[FLexerState.CurrentIndex + 1] = '''' then
-          Inc(FLexerState.CurrentIndex)
-        else
-        begin
-          Inc(FLexerState.CurrentIndex);
+        Inc(FLexerState.CurrentIndex);
+        if FStartPtr[FLexerState.CurrentIndex] <> '''' then
           Break;
-        end;
       end;
       #0, #10, #13:
       begin
@@ -372,17 +368,17 @@ begin
         WasExponent := True;
       end;
       '.':
+      begin
         // A dot after the exponent ('1e33.3') is not part of the number.
         if (FStartPtr[FLexerState.CurrentIndex + 1] = '.') or (FStartPtr[FLexerState.CurrentIndex + 1] = ')')
             or WasPoint or WasExponent
         then
-          Break
-        else
-        begin
-          FLexerState.CurrentToken := tkFloat;
-          WasPoint := True;
-          Inc(FLexerState.CurrentIndex);
-        end;
+          Break;
+
+        FLexerState.CurrentToken := tkFloat;
+        WasPoint := True;
+        Inc(FLexerState.CurrentIndex);
+      end;
     else
       Break;
     end;
@@ -435,15 +431,15 @@ begin
     '*':
     begin
       FLexerState.CurrentToken := tkStarParenComment;
-      if FStartPtr[FLexerState.CurrentIndex + 1] = '$' then
+      if FStartPtr[FLexerState.CurrentIndex + 1] <> '$' then
+        FLexerState.CommentState := csStarParen
+      else
       begin
         FLexerState.CurrentToken := tkCompilerDirective;
         Inc(FLexerState.CurrentIndex, 2);
         CompilerDirectiveHandler;
         Exit;
-      end
-      else
-        FLexerState.CommentState := csStarParen;
+      end;
 
       Inc(FLexerState.CurrentIndex);
       while True do
@@ -456,7 +452,8 @@ begin
               Inc(FLexerState.CurrentIndex, 2);
               Break;
             end;
-          #0, #10, #13: Break;
+          #0, #10, #13:
+            Break;
         end;
         Inc(FLexerState.CurrentIndex);
       end;
@@ -818,14 +815,13 @@ begin
         end;
         '*':
         begin
-          if FStartPtr[FLexerState.CurrentIndex + 1] = ')' then
+          Inc(FLexerState.CurrentIndex);
+          if FStartPtr[FLexerState.CurrentIndex] = ')' then
           begin
             FLexerState.CommentState := csNo;
-            Inc(FLexerState.CurrentIndex, 2);
-            Break;
-          end
-          else
             Inc(FLexerState.CurrentIndex);
+            Break;
+          end;
         end;
         #10:
         begin
@@ -1096,7 +1092,7 @@ begin
     FLexerState.CurrentToken := tkEOF;
     Exit(False);
   end;
-  if not (FLexerState.CurrentToken in DIRECTIVE_UNSIGNIFICANT_TOKENS) then
+  if not (FLexerState.CurrentToken in DIRECTIVE_INSIGNIFICANT_TOKENS) then
   begin
     FLexerState.LastSignificantToken := FLexerState.CurrentToken;
     FLexerState.LastSignificantTokenPos := FLexerState.CurrentTokenPos;

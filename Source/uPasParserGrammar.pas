@@ -51,7 +51,7 @@ type
     function GetPrevChildNodeForIndex(AFromIndex: Integer): TBaseLexemeNode;
 
     procedure InternalParseItself; virtual; abstract;
-    procedure FinalyzeNodeEnd; virtual;
+    procedure FinalizeNodeEnd; virtual;
 
     function GetFirstChild: TBaseLexemeNode;
     function GetLastChild: TBaseLexemeNode;
@@ -244,14 +244,14 @@ end;
 
 procedure TStatesRecord.SkipUnsignificantTokens;
 begin
-  while CurrentToken in UNSIGNIFICANT_TOKENS do
+  while CurrentToken in INSIGNIFICANT_TOKENS do
     if not GetNextToken then Exit;
 end;
 
 function TStatesRecord.GetNextSignificantToken: Boolean;
 begin
   while GetNextToken do
-    if not(CurrentToken in UNSIGNIFICANT_TOKENS) then
+    if not(CurrentToken in INSIGNIFICANT_TOKENS) then
       Exit(True);
 
   Result := False;
@@ -325,7 +325,7 @@ begin
     if FChildNodes[i] = ANode then
     begin
       if i < High(FChildNodes) then
-        Move(FChildNodes[i + 1], FChildNodes[i], SizeOf(TBaseLexemeNode));
+        Move(FChildNodes[i + 1], FChildNodes[i], SizeOf(TBaseLexemeNode) * (Length(FChildNodes) - i - 1));
       SetLength(FChildNodes, Length(FChildNodes) - 1);
       Break;
     end;
@@ -349,7 +349,7 @@ begin
     Result := FChildNodes[AFromIndex];
 end;
 
-procedure TBaseLexemeNode.FinalyzeNodeEnd;
+procedure TBaseLexemeNode.FinalizeNodeEnd;
 begin
   FParserStateRecord.FCount := FParserStateRecord.FCurrentIndex - FParserStateRecord.StartIndex;
   if Assigned(FParentNode) then
@@ -387,9 +387,8 @@ begin
   begin
     TempNode := Result.GetNextSibling;
     if Assigned(TempNode) then
-      Exit(TempNode)
-    else
-      Result := Result.ParentNode;
+      Exit(TempNode);
+    Result := Result.ParentNode;
   end;
 end;
 
@@ -459,7 +458,7 @@ end;
 procedure TBaseLexemeNode.ParseItself;
 begin
   InternalParseItself;
-  FinalyzeNodeEnd;
+  FinalizeNodeEnd;
 end;
 
 function TBaseLexemeNode.GetLexemeLog: string;
@@ -500,7 +499,7 @@ begin
     while Length(FParserStateRecord.FParserStates^) > (FParserStateRecord.FCurrentIndex + 1) do
     begin
       Inc(FParserStateRecord.FCurrentIndex);
-      if not(StatesCurrentIndexToken in DIRECTIVE_UNSIGNIFICANT_TOKENS) then
+      if not(StatesCurrentIndexToken in DIRECTIVE_INSIGNIFICANT_TOKENS) then
         raise EPasGrammarParserException.CreateFmt(EMESSAGE_GRAMMAR_UNEXPECTED_TOKEN,
             [TOKEN_NAMES[tkUnknown], TOKEN_NAMES[StatesCurrentIndexToken]], Self);
     end;

@@ -1,4 +1,4 @@
-unit TestuPasLexerAdditional;
+Ôªøunit TestuPasLexerAdditional;
 
 {
   Additional tests for TPasLexer.
@@ -10,7 +10,7 @@ unit TestuPasLexerAdditional;
 interface
 
 uses
-  TestFramework, System.SysUtils, System.Character,
+  System.SysUtils, TestFramework,
   uPasLexer, uPasLexerTypes, uPasExceptions;
 
 type
@@ -36,6 +36,8 @@ type
     procedure TestIdentifiersAndPunctuation;
     procedure TestNumbers;
     procedure TestStrings;
+    // Doubled quotes ('') inside a string literal do not end the string.
+    procedure TestStringDoubledQuotes;
     procedure TestComments;
     procedure TestCompilerDirectivesAndCounters;
 
@@ -67,13 +69,21 @@ type
     procedure TestNextTokenNoDirectiveBranching;
     procedure TestLexerDumpSamples;
     procedure TestNextTokenWithKindNotFound;
+    // Starting inside the else branch returns the tokens of that branch only
     procedure TestNextTokenNoDirectiveBranchingElseBranch;
+    // #0 terminates the data for the lexer: everything after it is not lexed
     procedure TestEmbeddedNullChar;
+    // A line break at the very end of the data is still counted
     procedure TestTrailingLineBreak;
+    // CRCR, LF and LFCR are each a single line break token
     procedure TestConsecutiveLineBreaks;
+    // Numbers and identifiers are separated even without whitespace
     procedure TestNumberIdentifierSequences;
+    // (*$...*) directives are read like comments and do not span lines
     procedure TestStarParenDirectiveLineBreak;
+    // Conditional directive recognition inside the curly braces
     procedure TestDirectiveKeywordEdgeCases;
+    // The state array must contain an idsIf entry to restore the counters from
     procedure TestDirectiveErrorCountersNotFoundOnRestore;
   end;
 
@@ -119,7 +129,7 @@ begin
   Count := 0;
   repeat
     Token := FPasLexer.TokenID;
-    if not (Token in DIRECTIVE_UNSIGNIFICANT_TOKENS) then
+    if not (Token in DIRECTIVE_INSIGNIFICANT_TOKENS) then
     begin
       SetLength(Result, Count + 1);
       Result[Count] := Token;
@@ -176,7 +186,7 @@ begin
   S := ASource;
   try
     FPasLexer.SetData(S);
-    while FPasLexer.NextToken do ;
+    while FPasLexer.NextToken do;
   except
     on E: EPasLexerException do
     begin
@@ -221,6 +231,27 @@ begin
       'Unterminated string literal');
 end;
 
+procedure TestTPasLexerAdditional.TestStringDoubledQuotes;
+var
+  S: string;
+begin
+  CheckTokensEqual(
+      [tkIdentifier, tkSpace, tkAssign, tkSpace, tkString, tkSemiColon],
+      GetTokens('s := ''it''''s'';'),
+      'Doubled quote inside a string literal');
+
+  CheckTokensEqual(
+      [tkString, tkSemiColon],
+      GetTokens('''a''''b''''c'';'),
+      'Several doubled quotes inside a string literal');
+
+  // The whole literal, including the doubled quote, is one token
+  S := '''it''''s'';';
+  FPasLexer.SetData(S);
+  CheckTokenEquals(tkString, FPasLexer.TokenID, 'Token of the string literal');
+  CheckEquals('''it''''s''', FPasLexer.TokenString, 'Text of the string literal');
+end;
+
 procedure TestTPasLexerAdditional.TestComments;
 begin
   CheckTokensEqual(
@@ -244,7 +275,7 @@ begin
   LState := FPasLexer.LexerState;
   LState.IgnoreCompilerDirectiveChecks := True;
   FPasLexer.LexerState := LState;
-  while FPasLexer.NextToken do ;
+  while FPasLexer.NextToken do;
   CheckTrue(True, 'Lexer handled directives with IgnoreCompilerDirectiveChecks = True');
 end;
 
@@ -394,7 +425,7 @@ begin
   LState.IgnoreCompilerDirectiveChecks := True;
   FPasLexer.LexerState := LState;
   try
-    while FPasLexer.NextToken do ;
+    while FPasLexer.NextToken do;
   except
     Raised := True;
   end;
@@ -478,7 +509,7 @@ begin
   FPasLexer.NextToken;        // ':='
   CheckEquals(':=', FPasLexer.TokenString, 'Before snapshot');
   LState := FPasLexer.LexerState;
-  while FPasLexer.NextToken do ;
+  while FPasLexer.NextToken do;
   FPasLexer.LexerState := LState;
   CheckEquals(':=', FPasLexer.TokenString, 'State restored to the := token');
   CheckTokenEquals(tkAssign, FPasLexer.TokenID, 'State restore keeps token id');
@@ -586,6 +617,7 @@ const
 var
   i: Integer;
   S: string;
+  LState: TPasLexerState;
 begin
   for i := Low(Samples) to High(Samples) do
   begin
@@ -594,11 +626,11 @@ begin
     if i = High(Samples) then
     begin
       // unmatched {$ELSE} needs directive checks disabled to lex to EOF
-      var LState: TPasLexerState := FPasLexer.LexerState;
+      LState := FPasLexer.LexerState;
       LState.IgnoreCompilerDirectiveChecks := True;
       FPasLexer.LexerState := LState;
     end;
-    while FPasLexer.NextToken do ;
+    while FPasLexer.NextToken do;
     CheckTokenEquals(tkEOF, FPasLexer.TokenID,
         Format('Sample %d must lex to EOF: %s', [i, S]));
   end;
@@ -615,7 +647,6 @@ begin
   CheckTokenEquals(tkEOF, FPasLexer.TokenID, 'Lexer is at EOF');
 end;
 
-// Starting inside the else branch returns the tokens of that branch only
 procedure TestTPasLexerAdditional.TestNextTokenNoDirectiveBranchingElseBranch;
 var
   S: string;
@@ -636,7 +667,6 @@ begin
   CheckFalse(FPasLexer.NextTokenNoDirectiveBranching, 'No more tokens');
 end;
 
-// #0 terminates the data for the lexer: everything after it is not lexed
 procedure TestTPasLexerAdditional.TestEmbeddedNullChar;
 var
   S: string;
@@ -661,7 +691,6 @@ begin
   CheckTrue(csCurly = FPasLexer.LexerState.CommentState, 'Lexer commentstate with #0 inside a comment');
 end;
 
-// A line break at the very end of the data is still counted
 procedure TestTPasLexerAdditional.TestTrailingLineBreak;
 var
   S: string;
@@ -677,7 +706,6 @@ begin
       'Line counter is increased after the trailing line break');
 end;
 
-// CRCR, LF and LFCR are each a single line break token
 procedure TestTPasLexerAdditional.TestConsecutiveLineBreaks;
 begin
   CheckTokensEqual(
@@ -688,7 +716,6 @@ begin
       'Line after the last line break');
 end;
 
-// Numbers and identifiers are separated even without whitespace
 procedure TestTPasLexerAdditional.TestNumberIdentifierSequences;
 begin
   CheckTokensEqual([tkNumber, tkIdentifier], GetTokens('1e'),
@@ -701,17 +728,15 @@ begin
       'Point followed by number');
 end;
 
-// (*$...*) directives are read like comments and do not span lines
 procedure TestTPasLexerAdditional.TestStarParenDirectiveLineBreak;
 begin
-  // +++ ÔÓË‰ÂÂ ÌÂÔ‡‚ËÎ¸ÌÓ
+  // +++ –ø–æ–∏–¥–µ–µ –Ω–µ–ø—Ä–∞–≤–∏–ª—å–Ω–æ
   CheckTokensEqual(
       [tkCompilerDirective, tkIdentifier],
       GetTokens('(*$IFDEF X' + sLineBreak + 'Y*)z'),
       'Star paren directive with a line break');
 end;
 
-// Conditional directive recognition inside the curly braces
 procedure TestTPasLexerAdditional.TestDirectiveKeywordEdgeCases;
 begin
   // Lowercase directive keywords are recognized too
@@ -738,7 +763,6 @@ begin
       'Space after the opening brace makes it a comment');
 end;
 
-// The state array must contain an idsIf entry to restore the counters from
 procedure TestTPasLexerAdditional.TestDirectiveErrorCountersNotFoundOnRestore;
 var
   S: string;
@@ -749,7 +773,7 @@ var
   begin
     Raised := False;
     try
-      while FPasLexer.NextToken do ;
+      while FPasLexer.NextToken do;
     except
       on E: EPasLexerException do
       begin

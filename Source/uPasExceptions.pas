@@ -15,9 +15,9 @@
 *                                                                              *
 *  Author: Pervov Evgeny                                                       *
 *  Created: 10.05.2025                                                         *
-*  Description: Exceptons for TPasLexer and TPasParser classes                 *
-*  Version: 0.1                                                                *
-*  Last modified: 10.05.2025                                                   *
+*  Description: Exceptions for TPasLexer and TPasParser classes                *
+*  Version: 0.2                                                                *
+*  Last modified: 01.11.2026                                                   *
 *  Contributor(s):                                                             *
 *    Pervov Evgeny <operationm@list.ru>                                        *
 *******************************************************************************)
@@ -28,7 +28,7 @@ interface
 
 uses
   System.SysUtils,
-  uPasLexer, uPasLexerTypes, uPasParser, uPasParserGrammar;
+  uPasLexer, uPasLexerTypes, uPasParser, uPasParserGrammar, uPasParserTypes;
 
 type
   EPasBaseException = class(Exception);
@@ -56,7 +56,8 @@ type
   EPasGrammarParserException = class(EPasLexerException)
   protected
     constructor Create(const AMessage: string; ALexer: TPasLexer = nil); overload; deprecated 'don''t use this constructor';
-    constructor CreateFmt(const Msg: string; const Args: array of const; ALexer: TPasLexer = nil); overload; deprecated 'don''t use this constructor';
+    constructor CreateFmt(const Msg: string; const Args: array of const;
+        ALexer: TPasLexer = nil); overload; deprecated 'don''t use this constructor';
   public
     constructor Create(const AMessage: string; ALexeme: TBaseLexemeNode = nil); overload;
     constructor CreateFmt(const Msg: string; const Args: array of const; ALexeme: TBaseLexemeNode = nil); overload;
@@ -65,19 +66,21 @@ type
 function GetTokenSetStringForOR(ATokenSet: TTokenKindSet): string;
 
 resourcestring
-  EMESSAGE_TIMER_NOT_AVAILABLE = 'Error creating %s, high resolution timer is not available';
-  EMESSAGE_TIMER_NOT_INITIALIZED = 'Error, high precision timer was not initialized';
-  EMESSAGE_TIMER_WAIT_FAILED = 'Error, failed wait for waitable timer';
+  EMESSAGE_TIMER_NOT_AVAILABLE = 'Error creating %s, high resolution timer is not available.';
+  EMESSAGE_TIMER_NOT_INITIALIZED = 'Error, high precision timer was not initialized.';
+  EMESSAGE_TIMER_WAIT_FAILED = 'Error, failed wait for waitable timer.';
 
-  EMESSAGE_UNEXPECTED_ELSE_DIRECTIVE = 'Unexpected ELSE or ELSEIF compiler directive';
-  EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH = 'Directive states and counters arrays mismatch';
-  EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE = 'Lexer counters mismatch at ELSE or ELSEIF directive';
-  EMESSAGE_DIRECTIVE_COUNTERS_NOTFOUND_ON_RESTORE = 'Could not find saved counters data to restore at ELSE or ELSEIF directive';
+  EMESSAGE_UNEXPECTED_ELSE_DIRECTIVE = 'Unexpected ELSE or ELSEIF compiler directive.';
+  EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH = 'Directive states and counters arrays mismatch.';
+  EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE = 'Lexer counters mismatch at ELSE or ELSEIF directive.';
+  EMESSAGE_DIRECTIVE_COUNTERS_NOTFOUND_ON_RESTORE = 'Could not find saved counters data to restore at ELSE or ELSEIF directive.';
+  EMESSAGE_FILE_DOES_NOT_EXISTS = 'File does not exists (%s).';
+  EMESSAGE_FAILED_TO_READ_FILE = 'Failed to read file (%s): %s.';
 
-  EMESSAGE_GET_INDEX_OUT_OF_RANGE = 'Requested index out of range (%d)';
+  EMESSAGE_GET_INDEX_OUT_OF_RANGE = 'Requested index out of range (%d).';
 
-  EMESSAGE_GRAMMAR_UNEXPECTED_ENDOFBLOCK = 'Unexpected end of block (%s)';
-  EMESSAGE_GRAMMAR_UNEXPECTED_TOKEN = 'Unexpected token, expected %s, got %s';
+  EMESSAGE_GRAMMAR_UNEXPECTED_ENDOFBLOCK = 'Unexpected end of block (%s).';
+  EMESSAGE_GRAMMAR_UNEXPECTED_TOKEN = 'Unexpected token, expected %s, got %s.';
 
 implementation
 
@@ -142,14 +145,14 @@ end;
 
 constructor EPasGrammarParserException.Create(const AMessage: string; ALexeme: TBaseLexemeNode = nil);
 begin
+  inherited Create(AMessage);
+
   if Assigned(ALexeme) then
   begin
     FLineNumber := ALexeme.StatesCurrentIndexLineNumber;
     FLineCharIndex := ALexeme.StatesCurrentIndexLineCharIndex;
     FCurrentToken := ALexeme.StatesCurrentIndexToken;
   end;
-
-  inherited Create(AMessage);
 end;
 
 constructor EPasGrammarParserException.CreateFmt(const Msg: string; const Args: array of const; ALexeme: TBaseLexemeNode = nil);
