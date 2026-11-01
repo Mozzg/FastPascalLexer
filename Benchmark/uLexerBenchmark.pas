@@ -58,17 +58,28 @@ type
     // Text of the input file, loaded once and tokenized by every pass
     FData: string;
     FIterations: Integer;
+    // Minimum number of warm-up passes
     FWarmupCount: Integer;
+    // Minimum duration of the warm-up in milliseconds
+    FWarmupTime: Integer;
+    // Number of warm-up passes actually run and their total duration in nanoseconds
+    FWarmupPasses: Integer;
+    FWarmupElapsed: Int64;
     FHelpRequested: Boolean;
+    FTraceRequested: Boolean;
     FHighPriority: Boolean;
+    FPowerThrottlingDisabled: Boolean;
     // Token count of the validation pass, every later pass must produce the same count
     FTokenCount: Int64;
     // Duration of every measured pass in nanoseconds, sorted after the measurement
     FPassTimes: TArray<Int64>;
+    // Copy of FPassTimes in run order, filled only when -trace is given
+    FPassTimesInRunOrder: TArray<Int64>;
     function ReadCount(const ASwitch, AValue: string; AMinimum: Integer): Integer;
     procedure ReadParameters;
     procedure LoadData;
     procedure RaisePriority;
+    procedure DisablePowerThrottling;
     // Tokenizes the whole text once and returns the number of tokens, the final tkEOF not counted
     function RunPass: Int64;
     procedure ValidateData;
@@ -77,6 +88,7 @@ type
     function FormatTime(ANanoseconds: Double): string;
     procedure PrintUsage;
     procedure PrintSummary;
+    procedure PrintPassTrace;
   public
     constructor Create;
     destructor Destroy; override;
@@ -85,7 +97,33 @@ type
     procedure Execute;
   end;
 
+// Waits for Enter when the process runs in a console window of its own (started from the IDE or Explorer), so that
+// the window does not close before the output is read. Does nothing when the process shares the console of a command
+// prompt or its input or output is redirected, so automated runs never block.
+procedure WaitForEnterInOwnConsole;
+
 implementation
+
+{ }
+
+procedure WaitForEnterInOwnConsole;
+var
+  Mode: DWORD;
+  // Two entries are enough to tell a single attached process from several
+  ProcessIds: array [0..1] of DWORD;
+begin
+  if (not GetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), Mode))
+      or (not GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), Mode))
+  then
+    Exit;
+  // A command prompt stays attached to its console, a console created for this process has no other processes
+  if GetConsoleProcessList(@ProcessIds[0], Length(ProcessIds)) <> 1 then
+    Exit;
+
+  Writeln;
+  Write(TEXT_PRESS_ENTER);
+  Readln;
+end;
 
 { EBenchmarkError }
 
@@ -104,6 +142,7 @@ begin
   FFileName := ExpandFileName(ExtractFilePath(ParamStr(0)) + DEFAULT_DATA_FILE);
   FIterations := DEFAULT_ITERATIONS;
   FWarmupCount := DEFAULT_WARMUP_COUNT;
+  FWarmupTime := DEFAULT_WARMUP_TIME;
   FStopwatch := THighResolutionStopwatch.Create;
   FLexer := TPasLexer.Create;
 end;
@@ -144,13 +183,22 @@ begin
       Switch := Copy(Switch, 1, SeparatorPos - 1);
     end;
 
+    // Switches without a value
     if SameText(Switch, SWITCH_HELP) or (Switch = SWITCH_HELP_SHORT) then
     begin
       FHelpRequested := True;
       Inc(i);
       Continue;
     end;
-    if not (SameText(Switch, SWITCH_FILE) or SameText(Switch, SWITCH_ITERATIONS) or SameText(Switch, SWITCH_WARMUP)) then
+    if SameText(Switch, SWITCH_TRACE) then
+    begin
+      FTraceRequested := True;
+      Inc(i);
+      Continue;
+    end;
+    if not (SameText(Switch, SWITCH_FILE) or SameText(Switch, SWITCH_ITERATIONS) or SameText(Switch, SWITCH_WARMUP)
+        or SameText(Switch, SWITCH_WARMUP_TIME))
+    then
       raise EBenchmarkError.Create(EXIT_CODE_INVALID_PARAMETER, Format(EMESSAGE_UNKNOWN_SWITCH, [Parameter]));
 
     if not HasValue then
@@ -165,8 +213,10 @@ begin
       FFileName := ExpandFileName(Value)
     else if SameText(Switch, SWITCH_ITERATIONS) then
       FIterations := ReadCount(Switch, Value, 1)
+    else if SameText(Switch, SWITCH_WARMUP) then
+      FWarmupCount := ReadCount(Switch, Value, 0)
     else
-      FWarmupCount := ReadCount(Switch, Value, 0);
+      FWarmupTime := ReadCount(Switch, Value, 0);
     Inc(i);
   end; // while i <= ParamCount
 end;
@@ -192,6 +242,39 @@ procedure TLexerBenchmark.RaisePriority;
 begin
   // Less preemption by other processes gives more stable timings; failure only lowers the stability
   FHighPriority := SetPriorityClass(GetCurrentProcess, HIGH_PRIORITY_CLASS);
+end;
+
+procedure TLexerBenchmark.DisablePowerThrottling;
+type
+  // PROCESS_POWER_THROTTLING_STATE of the Windows SDK, not declared in Winapi.Windows of Delphi 11
+  TProcessPowerThrottlingState = record
+    Version: ULONG;
+    ControlMask: ULONG;
+    StateMask: ULONG;
+  end;
+const
+  // Value of ProcessPowerThrottling in PROCESS_INFORMATION_CLASS of the Windows SDK; Winapi.Windows of Delphi 11 does not
+  // declare it and gives the value 4 an outdated name
+  ProcessPowerThrottling = TProcessInformationClass(4);
+  PROCESS_POWER_THROTTLING_CURRENT_VERSION = 1;
+  PROCESS_POWER_THROTTLING_EXECUTION_SPEED = $1;
+  // SetProcessInformation is available starting with Windows 8
+  SET_PROCESS_INFORMATION_MAJOR_VERSION = 6;
+  SET_PROCESS_INFORMATION_MINOR_VERSION = 2;
+var
+  State: TProcessPowerThrottlingState;
+begin
+  // Opts the process out of power throttling (EcoQoS), so Windows does not lower the clock for it while its window is
+  // in the background or minimized. Windows before 10 version 1709 rejects the call; failure only lowers the stability.
+  FPowerThrottlingDisabled := False;
+  if not TOSVersion.Check(SET_PROCESS_INFORMATION_MAJOR_VERSION, SET_PROCESS_INFORMATION_MINOR_VERSION) then
+    Exit;
+
+  // The execution speed policy is controlled by the process and switched off
+  State.Version := PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+  State.ControlMask := PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+  State.StateMask := 0;
+  FPowerThrottlingDisabled := SetProcessInformation(GetCurrentProcess, ProcessPowerThrottling, @State, SizeOf(State));
 end;
 
 function TLexerBenchmark.RunPass: Int64;
@@ -228,11 +311,17 @@ begin
 end;
 
 procedure TLexerBenchmark.RunWarmupPasses;
-var
-  i: Integer;
 begin
-  for i := 1 to FWarmupCount do
+  // Both minimums must be reached. The passes bring the code and the data into the caches; the duration lets an idle
+  // core reach its full clock, which takes up to ~10 ms and does not depend on the size of the input.
+  FWarmupPasses := 0;
+  FStopwatch.Restart;
+  while (FWarmupPasses < FWarmupCount) or (FStopwatch.ElapsedMiliseconds < FWarmupTime) do
+  begin
     RunPass;
+    Inc(FWarmupPasses);
+  end;
+  FWarmupElapsed := Round(FStopwatch.ElapsedSeconds * NANOSECONDS_PER_SECOND);
 end;
 
 procedure TLexerBenchmark.RunMeasuredPasses;
@@ -252,6 +341,8 @@ begin
       raise EBenchmarkError.Create(EXIT_CODE_LEXER_FAILURE,
           Format(EMESSAGE_TOKEN_COUNT_CHANGED, [i + 1, PassTokenCount, FTokenCount]));
   end;
+  if FTraceRequested then
+    FPassTimesInRunOrder := Copy(FPassTimes);
   TArray.Sort<Int64>(FPassTimes);
 end;
 
@@ -263,7 +354,7 @@ end;
 procedure TLexerBenchmark.PrintUsage;
 begin
   Writeln(TEXT_TITLE);
-  Writeln(Format(TEXT_USAGE, [DEFAULT_ITERATIONS, DEFAULT_WARMUP_COUNT]));
+  Writeln(Format(TEXT_USAGE, [DEFAULT_ITERATIONS, DEFAULT_WARMUP_COUNT, DEFAULT_WARMUP_TIME]));
 end;
 
 procedure TLexerBenchmark.PrintSummary;
@@ -271,7 +362,7 @@ var
   i, Middle: Integer;
   TotalTime: Int64;
   MedianTime, MeanTime, MedianSeconds: Double;
-  PriorityText: string;
+  PriorityText, PowerThrottlingText: string;
 begin
   // FPassTimes is sorted: the median of an even count is the mean of the two middle values
   Middle := FIterations div 2;
@@ -289,15 +380,21 @@ begin
     PriorityText := TEXT_PRIORITY_HIGH
   else
     PriorityText := TEXT_PRIORITY_NORMAL;
+  if FPowerThrottlingDisabled then
+    PowerThrottlingText := TEXT_POWER_THROTTLING_DISABLED
+  else
+    PowerThrottlingText := TEXT_POWER_THROTTLING_DEFAULT;
 
   Writeln(TEXT_TITLE);
   Writeln(Format(TEXT_BUILD, [BUILD_PLATFORM, BUILD_CONFIG]));
   Writeln(Format(TEXT_PRIORITY, [PriorityText]));
+  Writeln(Format(TEXT_POWER_THROTTLING, [PowerThrottlingText]));
   Writeln(Format(TEXT_FILE, [FFileName]));
   Writeln(Format(TEXT_FILE_SIZE, [FFileSize]));
   Writeln(Format(TEXT_CHARACTERS, [Length(FData)]));
   Writeln(Format(TEXT_TOKENS, [FTokenCount]));
-  Writeln(Format(TEXT_WARMUP, [FWarmupCount]));
+  Writeln(Format(TEXT_WARMUP, [FWarmupPasses]));
+  Writeln(Format(TEXT_WARMUP_TIME, [FormatTime(FWarmupElapsed)]));
   Writeln(Format(TEXT_ITERATIONS, [FIterations]));
   Writeln(Format(TEXT_MIN_TIME, [FormatTime(FPassTimes[0])]));
   Writeln(Format(TEXT_MEDIAN_TIME, [FormatTime(MedianTime)]));
@@ -307,7 +404,14 @@ begin
       [FormatFloat(NUMBER_FORMAT_SPEED, FFileSize / BYTES_PER_MEGABYTE / MedianSeconds, FFormatSettings)]));
   Writeln(Format(TEXT_MEDIAN_TOKEN_SPEED,
       [FormatFloat(NUMBER_FORMAT_SPEED, FTokenCount / TOKENS_PER_MILLION / MedianSeconds, FFormatSettings)]));
-  Writeln(TEXT_RESULT_OK);
+end;
+
+procedure TLexerBenchmark.PrintPassTrace;
+var
+  i: Integer;
+begin
+  for i := 0 to FIterations - 1 do
+    Writeln(Format(TEXT_PASS_TIME, [i + 1, FormatTime(FPassTimesInRunOrder[i])]));
 end;
 
 procedure TLexerBenchmark.Execute;
@@ -321,10 +425,14 @@ begin
 
   LoadData;
   RaisePriority;
+  DisablePowerThrottling;
   ValidateData;
   RunWarmupPasses;
   RunMeasuredPasses;
   PrintSummary;
+  if FTraceRequested then
+    PrintPassTrace;
+  Writeln(TEXT_RESULT_OK);
 end;
 
 end.

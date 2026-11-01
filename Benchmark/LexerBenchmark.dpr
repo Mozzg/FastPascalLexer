@@ -44,4 +44,5 @@ begin
       Writeln(Format(TEXT_RESULT_FAILED, [ExitCode]));
     end;
   end;
+  WaitForEnterInOwnConsole;
 end.

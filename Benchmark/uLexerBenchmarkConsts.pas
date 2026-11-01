@@ -42,12 +42,17 @@ const
   SWITCH_FILE = 'file';
   SWITCH_ITERATIONS = 'iterations';
   SWITCH_WARMUP = 'warmup';
+  SWITCH_WARMUP_TIME = 'warmuptime';
+  SWITCH_TRACE = 'trace';
   SWITCH_HELP = 'help';
   SWITCH_HELP_SHORT = '?';
 
   // Default benchmark settings
-  DEFAULT_ITERATIONS = 200;
+  DEFAULT_ITERATIONS = 500;
   DEFAULT_WARMUP_COUNT = 10;
+  // Minimum warm-up duration in milliseconds. An idle core needs up to ~10 ms to reach its full clock whatever the size
+  // of the input, so a warm-up of a few passes over a small file is too short; the margin covers slower power plans.
+  DEFAULT_WARMUP_TIME = 200;
   // Default input file, relative to the directory of the executable
   DEFAULT_DATA_FILE = '..\UnitTests\TestData\VirtualTrees.pas';
 
@@ -77,11 +82,15 @@ const
   TEXT_PRIORITY = 'Priority: %s';
   TEXT_PRIORITY_HIGH = 'High';
   TEXT_PRIORITY_NORMAL = 'Normal';
+  TEXT_POWER_THROTTLING = 'PowerThrottling: %s';
+  TEXT_POWER_THROTTLING_DISABLED = 'Disabled';
+  TEXT_POWER_THROTTLING_DEFAULT = 'Default';
   TEXT_FILE = 'File: %s';
   TEXT_FILE_SIZE = 'FileSizeBytes: %d';
   TEXT_CHARACTERS = 'Characters: %d';
   TEXT_TOKENS = 'Tokens: %d';
   TEXT_WARMUP = 'WarmupPasses: %d';
+  TEXT_WARMUP_TIME = 'WarmupMs: %s';
   TEXT_ITERATIONS = 'Iterations: %d';
   TEXT_MIN_TIME = 'MinMs: %s';
   TEXT_MEDIAN_TIME = 'MedianMs: %s';
@@ -89,18 +98,25 @@ const
   TEXT_MAX_TIME = 'MaxMs: %s';
   TEXT_MEDIAN_SPEED = 'MedianMBPerSecond: %s';
   TEXT_MEDIAN_TOKEN_SPEED = 'MedianMTokensPerSecond: %s';
+  // Printed for every measured pass with -trace, numbered from 1 in run order
+  TEXT_PASS_TIME = 'PassMs[%d]: %s';
   TEXT_RESULT_OK = 'Result: OK';
   TEXT_RESULT_FAILED = 'Result: FAILED (exit code %d)';
   TEXT_ERROR = 'Error: %s';
   TEXT_UNEXPECTED_ERROR = 'Error: %s: %s';
+  TEXT_PRESS_ENTER = 'Press Enter to close the window...';
 
-  TEXT_USAGE = 'Usage: LexerBenchmark.exe [-file <path>] [-iterations <count>] [-warmup <count>]'
+  TEXT_USAGE = 'Usage: LexerBenchmark.exe [-file <path>] [-iterations <count>] [-warmup <count>] [-warmuptime <ms>] [-trace]'
       + sLineBreak + '  -file <path>          Pascal source file to tokenize'
       + sLineBreak + '                        (default: <exe dir>\' + DEFAULT_DATA_FILE + ')'
       + sLineBreak + '  -iterations <count>   Number of measured passes, at least 1 (default: %d)'
-      + sLineBreak + '  -warmup <count>       Number of unmeasured warm-up passes, 0 or more (default: %d)'
+      + sLineBreak + '  -warmup <count>       Minimum number of unmeasured warm-up passes, 0 or more (default: %d)'
+      + sLineBreak + '  -warmuptime <ms>      Minimum warm-up duration in milliseconds, 0 or more (default: %d);'
+      + sLineBreak + '                        the warm-up lasts until both minimums are reached'
+      + sLineBreak + '  -trace                Also print the time of every measured pass in run order'
       + sLineBreak + '  -help, -?             Show this help'
       + sLineBreak + 'Switches start with "-" or "/"; a value follows as the next parameter or after a colon (-iterations:100).'
+      + sLineBreak + 'Started in a console window of its own (from the IDE or Explorer), the benchmark waits for Enter before exiting.'
       + sLineBreak + 'Exit codes: 0 success, 1 input file not found, 2 invalid parameter, 3 lexer error, 4 unexpected error.';
 
   // Error messages
@@ -111,7 +127,7 @@ const
   EMESSAGE_EMPTY_FILE = 'Input file "%s" contains no tokens.';
   EMESSAGE_UNKNOWN_SWITCH = 'Unknown command line parameter "%s". Run with -help to see the supported parameters.';
   EMESSAGE_MISSING_VALUE = 'Command line switch "%s" requires a value.';
-  EMESSAGE_INVALID_COUNT = 'Value "%s" of switch "%s" is not a valid count, expected an integer of at least %d.';
+  EMESSAGE_INVALID_COUNT = 'Value "%s" of switch "%s" is not valid, expected an integer of at least %d.';
   EMESSAGE_LEXER_EXCEPTION = 'Lexer failed on the validation pass at line %d: %s: %s';
   EMESSAGE_UNBALANCED_COUNTERS = 'Lexer finished the validation pass with unbalanced counters '
       + '(round brackets %d, square brackets %d, IF directives %d).';

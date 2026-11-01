@@ -417,23 +417,38 @@ configurations are for interactive use in the IDE.
 TestApp). Each pass is `SetData` + `while NextToken do` over the whole text,
 without `TokenString`. A validation pass checks that the text is tokenized
 without errors, then warm-up passes and measured passes run at high process
-priority, and every measured pass must yield the same token count.
+priority with power throttling disabled, and every measured pass must yield
+the same token count. The warm-up lasts until both a minimum pass count and a
+minimum duration are reached: an idle CPU needs up to ~10 ms to reach its full
+clock, and passes started earlier are up to ~2 times slower.
 
 - Build in `Release Win32` — the variant to compare numbers in:
   `build.cmd Benchmark/LexerBenchmark.dproj Release Win32`.
-- Run `Exe\LexerBenchmark.exe` (defaults: 10 warm-up + 200 measured passes
-  over `UnitTests\TestData\VirtualTrees.pas`, about 1 s). Switches (`-` or
-  `/`, value as the next parameter or after `:`): `-file <path>`,
-  `-iterations <n>`, `-warmup <n>`, `-help`.
-- Output: one `Key: Value` line each (`Build`, `Priority`, `File`,
-  `FileSizeBytes`, `Characters`, `Tokens`, `WarmupPasses`, `Iterations`,
-  `MinMs`, `MedianMs`, `MeanMs`, `MaxMs`, `MedianMBPerSecond`,
-  `MedianMTokensPerSecond`), ending with `Result: OK`. Compare `MedianMs`
-  (lower is better); back-to-back runs differ by about 0.1-1 %.
+- Run `Exe\LexerBenchmark.exe` (defaults: warm-up of at least 10 passes and
+  at least 200 ms, then 500 measured passes over
+  `UnitTests\TestData\VirtualTrees.pas`, about 3 s). Switches (`-` or `/`,
+  value as the next parameter or after `:`): `-file <path>`,
+  `-iterations <n>`, `-warmup <n>` (minimum warm-up passes),
+  `-warmuptime <ms>` (minimum warm-up duration), `-trace` (also print every
+  measured pass in run order), `-help`.
+- Output: one `Key: Value` line each (`Build`, `Priority`, `PowerThrottling`,
+  `File`, `FileSizeBytes`, `Characters`, `Tokens`, `WarmupPasses`,
+  `WarmupMs`, `Iterations`, `MinMs`, `MedianMs`, `MeanMs`, `MaxMs`,
+  `MedianMBPerSecond`, `MedianMTokensPerSecond`; with `-trace` also
+  `PassMs[N]` for every measured pass), ending with `Result: OK`.
+  `WarmupPasses` and `WarmupMs` are the actual warm-up.
+- Compare `MedianMs` (lower is better). Back-to-back runs differ by about
+  0.5 %, single passes by up to ±10-15 %, but series taken at different times
+  differ by up to ~4 % because of other load on the machine. Compare variants
+  only within one series: run each variant several times, alternating them.
 - Exit codes: 0 success, 1 input file not found, 2 invalid parameter,
   3 lexer error (exception, unbalanced counters or a changed token count),
   4 unexpected error. On failure the error goes to stderr and stdout ends with
   `Result: FAILED (exit code N)`.
+- Started in a console window of its own (from the IDE or Explorer), the
+  benchmark waits for Enter before exiting so the output stays readable. It
+  does not wait when started from a command prompt or with redirected input
+  or output, so automated runs never block.
 - The numbers are lower than TestApp's "Start time test", which also calls
   `TokenString` for every token. Compare only runs of the same build variant
   on the same machine.
