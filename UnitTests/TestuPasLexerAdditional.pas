@@ -29,6 +29,8 @@ type
     // Fails the test when the two tokens differ, reporting both token names.
     procedure CheckTokenEquals(AExpected, AActual: TTokenKind; const AMessage: string = '');
     procedure ExpectsLexerException(const ASource, AExpected: string);
+    // Checks the token, its text and its position (1-based line and column) after SetData or NextToken.
+    procedure CheckTokenAt(AToken: TTokenKind; const AText: string; ALine, AColumn: Integer; const AMessage: string);
   public
     procedure SetUp; override;
     procedure TearDown; override;
@@ -54,6 +56,16 @@ type
     procedure TestCompilerDirectiveNesting;
     procedure TestCompilerDirectiveExceptions;
     procedure TestCompilerDirectiveCountersAndBrackets;
+    // An {$ELSEIF} chain nested in another level closes only its own level (System.pas)
+    procedure TestDirectiveNestedElseIfChain;
+    // A level opened inside an {$ELSEIF} branch, with or without {$ELSE} (System.Math.pas)
+    procedure TestDirectiveNestedLevelInElseIfBranch;
+    // Delphi accepts a repeated {$ELSE} (TestExtensions.pas, Macapi.ObjectiveC.pas), but not {$ELSEIF} after {$ELSE}
+    procedure TestDirectiveRepeatedElse;
+    // Every branch must leave the bracket counters as the first branch of its level does
+    procedure TestDirectiveBranchCountersCompared;
+    // With IgnoreCompilerDirectiveChecks = True broken conditionals are lexed to the end and leave a consistent state
+    procedure TestDirectiveErrorsWithChecksIgnored;
 
     procedure TestPropertyTokens;
     procedure TestEndTokens;
@@ -79,12 +91,26 @@ type
     procedure TestConsecutiveLineBreaks;
     // Numbers and identifiers are separated even without whitespace
     procedure TestNumberIdentifierSequences;
-    // (*$...*) directives are read like comments and do not span lines
+    // A (*$...*) directive spanning several lines is one token, the lines after it are counted correctly
     procedure TestStarParenDirectiveLineBreak;
     // Conditional directive recognition inside the curly braces
     procedure TestDirectiveKeywordEdgeCases;
     // The state array must contain an idsIf entry to restore the counters from
     procedure TestDirectiveErrorCountersNotFoundOnRestore;
+    // '{$' ends only at '}' and '(*$' only at '*)', quotes inside the directive do not matter
+    procedure TestDirectiveClosingBracket;
+    // Every kind of line break inside a {$...} directive is counted, the column restarts after the last one
+    procedure TestCurlyDirectiveLineBreaks;
+    // Delphi 11 digit separator '_' in decimal, real, hexadecimal and character literals
+    procedure TestDigitSeparators;
+    // Delphi 11 binary literals %1010 are one integer token
+    procedure TestBinaryNumbers;
+    // Like Delphi, a dot followed by an ASCII letter or '_' ends the number: 1.ToString is 1 . ToString
+    procedure TestNumberFollowedByPoint;
+    // Inside an asm block a double quote starts a BASM string, elsewhere it is a symbol
+    procedure TestAsmDoubleQuotedStrings;
+    // IsAsmBlock is set by 'asm' and cleared by the 'end' of the block
+    procedure TestAsmBlockFlag;
   end;
 
 implementation
@@ -195,6 +221,17 @@ begin
     end;
   end;
   CheckTrue(Raised, 'Expected EPasLexerException for: ' + ASource);
+end;
+
+procedure TestTPasLexerAdditional.CheckTokenAt(AToken: TTokenKind; const AText: string; ALine, AColumn: Integer; const AMessage: string);
+var
+  State: TPasLexerState;
+begin
+  State := FPasLexer.LexerState;
+  CheckTokenEquals(AToken, FPasLexer.TokenID, AMessage + ': token');
+  CheckEquals(AText, FPasLexer.TokenString, AMessage + ': text');
+  CheckEquals(ALine, Integer(State.CurrentLine), AMessage + ': line');
+  CheckEquals(AColumn, Integer(State.CurrentTokenPos - State.CurrentLineStartPos) + 1, AMessage + ': column');
 end;
 
 procedure TestTPasLexerAdditional.TestIdentifiersAndPunctuation;
@@ -413,7 +450,7 @@ begin
   ExpectsLexerException('{$ELSE}', EMESSAGE_UNEXPECTED_ELSE_DIRECTIVE);
   ExpectsLexerException('{$ENDIF}', EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH);
   ExpectsLexerException('{$IFEND}', EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH);
-  ExpectsLexerException('{$IFDEF A}{$ELSE}{$ELSE}{$ENDIF}',
+  ExpectsLexerException('{$IF A}{$ELSE}{$ELSEIF B}{$ENDIF}',
       EMESSAGE_UNEXPECTED_ELSE_DIRECTIVE);
   ExpectsLexerException('{$IFDEF A}[{$ELSEIF B}{$ENDIF}',
       EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
@@ -438,6 +475,157 @@ begin
   CheckEquals(0, FPasLexer.LexerState.Counters.RoundCount);
   CheckEquals(0, FPasLexer.LexerState.Counters.SquareCount);
   CheckEquals(0, FPasLexer.LexerState.Counters.IfDirectiveCount);
+end;
+
+procedure TestTPasLexerAdditional.TestDirectiveNestedElseIfChain;
+begin
+  // The inner chain must be compared to its own first branch, not to the outer level
+  GetTokens('{$IFNDEF A}{$IF B}({$ELSEIF C}({$IF D}[{$ELSEIF E}[{$ENDIF}]{$ELSEIF F}({$ENDIF}){$ENDIF}');
+  CheckEquals(0, FPasLexer.LexerState.Counters.IfDirectiveCount, 'All levels are closed');
+  CheckEquals(0, Length(FPasLexer.LexerState.IfDirectiveStateArray), 'State array is empty');
+  CheckEquals(0, Length(FPasLexer.LexerState.IfDirectiveSavedCountersArray), 'Saved counters array is empty');
+  CheckEquals(0, FPasLexer.LexerState.Counters.RoundCount, 'Round brackets are balanced');
+  CheckEquals(0, FPasLexer.LexerState.Counters.SquareCount, 'Square brackets are balanced');
+
+  // The same with {$ELSE} and {$IFEND} after the inner chain
+  GetTokens('{$IFDEF A}{$IF B}x{$ELSEIF C}y{$ELSE}z{$IFEND}{$ENDIF}');
+  CheckEquals(0, FPasLexer.LexerState.Counters.IfDirectiveCount, 'Chain with ELSE: all levels are closed');
+  CheckEquals(0, Length(FPasLexer.LexerState.IfDirectiveStateArray), 'Chain with ELSE: state array is empty');
+end;
+
+procedure TestTPasLexerAdditional.TestDirectiveNestedLevelInElseIfBranch;
+var
+  S: string;
+begin
+  GetTokens('{$IF A}({$ELSEIF B}({$IFOPT R+}{$ENDIF}{$ENDIF})');
+  CheckEquals(0, FPasLexer.LexerState.Counters.IfDirectiveCount, 'IFOPT inside ELSEIF: all levels are closed');
+  CheckEquals(0, FPasLexer.LexerState.Counters.RoundCount, 'IFOPT inside ELSEIF: round brackets are balanced');
+
+  // The ELSE of the inner level must not be taken for the ELSE of the outer level
+  GetTokens('{$IF A}({$ELSEIF B}({$IFDEF C}[{$ELSE}[{$ENDIF}]{$ENDIF})');
+  CheckEquals(0, FPasLexer.LexerState.Counters.IfDirectiveCount, 'ELSE inside ELSEIF: all levels are closed');
+  CheckEquals(0, Length(FPasLexer.LexerState.IfDirectiveStateArray), 'ELSE inside ELSEIF: state array is empty');
+  CheckEquals(0, FPasLexer.LexerState.Counters.RoundCount, 'ELSE inside ELSEIF: round brackets are balanced');
+  CheckEquals(0, FPasLexer.LexerState.Counters.SquareCount, 'ELSE inside ELSEIF: square brackets are balanced');
+
+  // After the inner level is closed the outer level is still in its ELSEIF branch
+  S := '{$IF A}{$ELSEIF B}{$IFDEF C}{$ELSE}{$ENDIF}x{$ENDIF}';
+  FPasLexer.SetData(S);
+  CheckTrue(FPasLexer.NextTokenWithKind(tkIdentifier), 'Identifier after the inner level expected');
+  CheckEquals(1, FPasLexer.LexerState.Counters.IfDirectiveCount, 'Only the outer level is open');
+  CheckEquals(2, Length(FPasLexer.LexerState.IfDirectiveStateArray), 'Outer level has two state entries');
+  CheckTrue(FPasLexer.LexerState.IfDirectiveStateArray[0] = idsIf, 'First entry of the outer level');
+  CheckTrue(FPasLexer.LexerState.IfDirectiveStateArray[1] = idsElseIf, 'ELSEIF entry of the outer level');
+end;
+
+procedure TestTPasLexerAdditional.TestDirectiveRepeatedElse;
+var
+  S: string;
+begin
+  CheckTokensEqual([tkIdentifier, tkIdentifier, tkIdentifier, tkIdentifier],
+      GetTokensNoJunk('{$IFDEF A}a{$ELSE}b{$ELSE}c{$ENDIF}d'),
+      'Repeated ELSE');
+  CheckEquals(0, FPasLexer.LexerState.Counters.IfDirectiveCount, 'Repeated ELSE: the level is closed');
+  CheckEquals(0, Length(FPasLexer.LexerState.IfDirectiveStateArray), 'Repeated ELSE: state array is empty');
+
+  // TestExtensions.pas: text after ELSE is ignored by Delphi
+  GetTokens('{$IFDEF A}({$ELSE IFDEF B}({$ELSE}({$ENDIF})');
+  CheckEquals(0, FPasLexer.LexerState.Counters.IfDirectiveCount, 'ELSE with text: the level is closed');
+  CheckEquals(0, FPasLexer.LexerState.Counters.RoundCount, 'ELSE with text: round brackets are balanced');
+
+  // The branch of a repeated ELSE is compared like the others
+  ExpectsLexerException('{$IFDEF A}({$ELSE}({$ELSE}{$ENDIF})', EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
+  // ELSEIF after ELSE is a compile error (E2029)
+  ExpectsLexerException('{$IFDEF A}{$ELSE}{$ELSE}{$ELSEIF B}{$ENDIF}', EMESSAGE_UNEXPECTED_ELSE_DIRECTIVE);
+
+  // From the first ELSE branch NextTokenNoDirectiveBranching skips the repeated ELSE branch
+  S := '{$IFDEF X}a{$ELSE}b{$ELSE}c{$ENDIF}d';
+  FPasLexer.SetData(S);
+  CheckTrue(FPasLexer.NextTokenWithKind(tkIdentifier), 'Identifier of the IF branch expected');
+  CheckTrue(FPasLexer.NextTokenWithKind(tkIdentifier), 'Identifier of the ELSE branch expected');
+  CheckEquals('b', FPasLexer.TokenString, 'Token of the ELSE branch');
+  CheckTrue(FPasLexer.NextTokenNoDirectiveBranching, 'Token after the level expected');
+  CheckEquals('d', FPasLexer.TokenString, 'Token after the end directive');
+end;
+
+procedure TestTPasLexerAdditional.TestDirectiveBranchCountersCompared;
+begin
+  GetTokens('{$IF A}({$ELSEIF B}({$ELSE}({$ENDIF})');
+  CheckEquals(0, FPasLexer.LexerState.Counters.RoundCount, 'Equal branches: round brackets are balanced');
+
+  // An ELSEIF branch followed by ELSE is compared to the first branch too
+  ExpectsLexerException('{$IF A}({$ELSEIF B}{$ELSE}({$ENDIF})', EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
+  ExpectsLexerException('{$IF A}{$ELSEIF B}{$ELSEIF C}[{$ENDIF}', EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
+  ExpectsLexerException('{$IFDEF A}{$ELSE}({$ENDIF}', EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
+
+  // A level without ELSEIF and ELSE has one branch: it may change the counters
+  GetTokens('{$IFDEF A}({$ENDIF}');
+  CheckEquals(1, FPasLexer.LexerState.Counters.RoundCount, 'Single branch keeps its round bracket');
+  CheckEquals(0, FPasLexer.LexerState.Counters.IfDirectiveCount, 'Single branch: the level is closed');
+
+  // After the level the counters are the common end counters of its branches
+  GetTokens('{$IFDEF A}([{$ELSE}([{$ENDIF}');
+  CheckEquals(1, FPasLexer.LexerState.Counters.RoundCount, 'Round bracket after the level');
+  CheckEquals(1, FPasLexer.LexerState.Counters.SquareCount, 'Square bracket after the level');
+end;
+
+procedure TestTPasLexerAdditional.TestDirectiveErrorsWithChecksIgnored;
+const
+  // Every sample starts with an identifier: SetData lexes the first token before the checks can be turned off
+  SAMPLES: array[0..6] of string = (
+    'x{$ELSE}',
+    'x{$ELSEIF A}',
+    'x{$ENDIF}',
+    'x{$IFEND}{$ELSE}{$ENDIF}{$IFDEF A}{$ENDIF}',
+    'x{$IF A}{$ELSE}{$ELSEIF B}{$ENDIF}',
+    'x{$IFDEF A}({$ELSE}{$ENDIF}{$ENDIF}',
+    'x{$IFDEF A}{$IF B}{$ELSE}{$ELSE}{$ENDIF}{$ENDIF}{$ENDIF}{$ELSE}'
+  );
+var
+  S: string;
+  LState: TPasLexerState;
+  i: Integer;
+
+  procedure LexWithChecksIgnored(const ASample: string);
+  begin
+    LState := FPasLexer.LexerState;
+    LState.IgnoreCompilerDirectiveChecks := True;
+    FPasLexer.LexerState := LState;
+    try
+      while FPasLexer.NextToken do;
+    except
+      on E: Exception do
+        Fail(Format('No exception expected with checks ignored for %s, got %s: %s', [ASample, E.ClassName, E.Message]));
+    end;
+    CheckTokenEquals(tkEOF, FPasLexer.TokenID, 'Lexed to the end: ' + ASample);
+  end;
+
+begin
+  for i := Low(SAMPLES) to High(SAMPLES) do
+  begin
+    S := SAMPLES[i];
+    FPasLexer.SetData(S);
+    LexWithChecksIgnored(S);
+    CheckEquals(0, FPasLexer.LexerState.Counters.IfDirectiveCount, 'No open levels: ' + S);
+    CheckEquals(0, Length(FPasLexer.LexerState.IfDirectiveStateArray), 'State array is empty: ' + S);
+    CheckEquals(0, Length(FPasLexer.LexerState.IfDirectiveSavedCountersArray), 'Saved counters array is empty: ' + S);
+  end;
+
+  // A state without an idsIf entry: the directives cannot be matched and are skipped
+  S := '{$IFDEF A}x{$ELSEIF B}{$ELSE}{$ENDIF}';
+  FPasLexer.SetData(S);
+  LState := FPasLexer.LexerState;
+  LState.IfDirectiveStateArray[0] := idsElseIf;
+  FPasLexer.LexerState := LState;
+  LexWithChecksIgnored(S);
+
+  // State arrays of different lengths
+  S := '{$IFDEF A}x{$ELSE}{$ENDIF}';
+  FPasLexer.SetData(S);
+  LState := FPasLexer.LexerState;
+  SetLength(LState.IfDirectiveSavedCountersArray, 0);
+  FPasLexer.LexerState := LState;
+  LexWithChecksIgnored(S);
 end;
 
 procedure TestTPasLexerAdditional.TestPropertyTokens;
@@ -729,12 +917,25 @@ begin
 end;
 
 procedure TestTPasLexerAdditional.TestStarParenDirectiveLineBreak;
+var
+  S: string;
 begin
-  // +++ поидее неправильно
   CheckTokensEqual(
       [tkCompilerDirective, tkIdentifier],
       GetTokens('(*$IFDEF X' + sLineBreak + 'Y*)z'),
       'Star paren directive with a line break');
+
+  // The directive keeps the line it starts on, the next token is on the line where the directive ends
+  S := '(*$IFDEF X' + sLineBreak + 'Y*)z' + sLineBreak + ' w';
+  FPasLexer.SetData(S);
+  CheckTokenAt(tkCompilerDirective, '(*$IFDEF X' + sLineBreak + 'Y*)', 1, 1, 'Directive');
+  FPasLexer.NextToken;
+  CheckTokenAt(tkIdentifier, 'z', 2, 4, 'Token after the directive');
+  FPasLexer.NextToken;
+  CheckTokenAt(tkCRLF, sLineBreak, 2, 5, 'Line break after the directive');
+  FPasLexer.NextToken;
+  FPasLexer.NextToken;
+  CheckTokenAt(tkIdentifier, 'w', 3, 2, 'Token on the next line');
 end;
 
 procedure TestTPasLexerAdditional.TestDirectiveKeywordEdgeCases;
@@ -808,6 +1009,239 @@ begin
   LState.IfDirectiveStateArray[0] := idsElseIf;
   FPasLexer.LexerState := LState;
   ExpectCounterRestoreError('ENDIF without an if state to restore');
+end;
+
+procedure TestTPasLexerAdditional.TestDirectiveClosingBracket;
+var
+  S: string;
+begin
+  // Delphi 11 RTL (System.TypInfo, Winapi.Windows): curly braces inside a (*$...*) directive
+  S := '(*$HPPEMIT END ''  {}''*)x';
+  FPasLexer.SetData(S);
+  CheckTokenAt(tkCompilerDirective, '(*$HPPEMIT END ''  {}''*)', 1, 1, 'Curly braces inside a star paren directive');
+  FPasLexer.NextToken;
+  CheckTokenAt(tkIdentifier, 'x', 1, 24, 'Token after the star paren directive');
+
+  CheckTokensEqual([tkCompilerDirective, tkIdentifier], GetTokens('{$HPPEMIT ''*)''}x'),
+      'Star paren end inside a curly directive');
+  CheckTokensEqual([tkCompilerDirective, tkIdentifier, tkCompilerDirective], GetTokens('(*$IFDEF X}*)a(*$ENDIF*)'),
+      'Conditional star paren directives with a curly brace');
+  CheckEquals(0, FPasLexer.LexerState.Counters.IfDirectiveCount, 'Conditional star paren directives balance');
+
+  // Like Delphi, the directive ends at its first closing bracket even inside quotes
+  CheckTokensEqual([tkCompilerDirective, tkIdentifier, tkUnterminatedString], GetTokens('{$MESSAGE HINT ''a}b''}'),
+      'Curly brace inside quotes ends the curly directive');
+  CheckTokensEqual([tkCompilerDirective, tkIdentifier, tkUnterminatedString], GetTokens('(*$MESSAGE HINT ''a*)b''*)'),
+      'Star paren end inside quotes ends the star paren directive');
+
+  CheckTokensEqual([tkCompilerDirective], GetTokens('(*$DEFINE X}'), 'Unterminated star paren directive');
+  // A null char ends the directive and the data
+  CheckTokensEqual([tkCompilerDirective], GetTokens('{$DEFINE X' + #0 + '}y'), 'Null char inside a directive');
+end;
+
+procedure TestTPasLexerAdditional.TestCurlyDirectiveLineBreaks;
+var
+  S: string;
+  Raised: Boolean;
+begin
+  // LF, CR, CRLF and LFCR (two line breaks): five line breaks inside one directive
+  S := '{$DEFINE' + #10 + 'A' + #13 + 'B' + #13#10 + 'C' + #10#13 + '  D}  x' + sLineBreak + 'y';
+  FPasLexer.SetData(S);
+  CheckTokenAt(tkCompilerDirective, '{$DEFINE' + #10 + 'A' + #13 + 'B' + #13#10 + 'C' + #10#13 + '  D}', 1, 1, 'Directive');
+  FPasLexer.NextToken;
+  CheckTokenAt(tkSpace, '  ', 6, 5, 'Space after the directive');
+  FPasLexer.NextToken;
+  CheckTokenAt(tkIdentifier, 'x', 6, 7, 'Identifier after the directive');
+  FPasLexer.NextToken;
+  CheckTokenAt(tkCRLF, sLineBreak, 6, 8, 'Line break after the directive');
+  FPasLexer.NextToken;
+  CheckTokenAt(tkIdentifier, 'y', 7, 1, 'Identifier on the next line');
+
+  // A lexer error after the directive reports its own line and column ({$ELSEIF} after {$ELSE} is an error)
+  S := '{$IFDEF A' + sLineBreak + sLineBreak + '  B}' + sLineBreak + '  {$ELSE}{$ELSEIF B}{$ENDIF}';
+  Raised := False;
+  try
+    FPasLexer.SetData(S);
+    while FPasLexer.NextToken do;
+  except
+    on E: EPasLexerException do
+    begin
+      Raised := True;
+      CheckEquals(EMESSAGE_UNEXPECTED_ELSE_DIRECTIVE, E.Message, 'Error message');
+      CheckEquals(4, Integer(E.LineNumber), 'Line of the error');
+      CheckEquals(10, Integer(E.LineCharIndex), 'Column of the error');
+    end;
+  end;
+  CheckTrue(Raised, 'The ELSEIF directive after ELSE must raise an error');
+end;
+
+procedure TestTPasLexerAdditional.TestDigitSeparators;
+var
+  S: string;
+begin
+  CheckTokensEqual(
+      [tkIdentifier, tkAssign, tkNumber, tkPlus, tkFloat, tkPlus, tkInteger, tkPlus, tkAsciiChar, tkSemiColon],
+      GetTokensNoJunk('a := 1_000_000 + 1_000.000_5 + $FFFF_FFFF + #$00_41;'),
+      'Digit separators in an expression');
+
+  S := '1_000.5';
+  FPasLexer.SetData(S);
+  CheckTokenAt(tkFloat, '1_000.5', 1, 1, 'Real number with a digit separator');
+
+  CheckTokensEqual([tkNumber], GetTokens('1__0_'), 'Several and trailing digit separators');
+  CheckTokensEqual([tkFloat], GetTokens('1_.5'), 'Digit separator before the point');
+  CheckTokensEqual([tkFloat], GetTokens('1_e3'), 'Digit separator before the exponent');
+  CheckTokensEqual([tkFloat], GetTokens('1.5e+1_0'), 'Digit separator inside the exponent');
+  CheckTokensEqual([tkInteger], GetTokens('$_FF_'), 'Digit separators around hexadecimal digits');
+  CheckTokensEqual([tkAsciiChar, tkAsciiChar], GetTokens('#1_3#_10'), 'Digit separators in character codes');
+
+  // Like Delphi, the exponent must start with a digit
+  CheckTokensEqual([tkNumber, tkIdentifier], GetTokens('1E_5'), 'Digit separator right after the exponent');
+  CheckTokensEqual([tkFloat, tkIdentifier, tkPlus, tkIdentifier], GetTokens('1.5e+_3'),
+      'Digit separator right after the exponent sign');
+  CheckTokensEqual([tkNumber, tkSpace, tkIdentifier], GetTokens('1 _a'), 'Identifier starting with an underscore');
+end;
+
+procedure TestTPasLexerAdditional.TestBinaryNumbers;
+var
+  S: string;
+begin
+  CheckTokensEqual(
+      [tkIdentifier, tkAssign, tkInteger, tkAnd, tkInteger, tkSemiColon],
+      GetTokensNoJunk('a := %1010_0101 and %1;'),
+      'Binary numbers in an expression');
+
+  S := '%1010';
+  FPasLexer.SetData(S);
+  CheckTokenAt(tkInteger, '%1010', 1, 1, 'Binary number');
+
+  CheckTokensEqual([tkInteger], GetTokens('%_1_'), 'Digit separators around binary digits');
+  // Like Delphi, the binary number ends at the first digit that is not binary
+  CheckTokensEqual([tkInteger, tkNumber], GetTokens('%102'), 'Decimal digit after binary digits');
+  // A percent sign without binary digits stays a symbol
+  CheckTokensEqual([tkSymbol, tkNumber], GetTokens('%2'), 'Percent sign before a decimal digit');
+  CheckTokensEqual([tkSymbol, tkSpace, tkInteger], GetTokens('% %0'), 'Single percent sign');
+end;
+
+procedure TestTPasLexerAdditional.TestNumberFollowedByPoint;
+var
+  S: string;
+begin
+  CheckTokensEqual(
+      [tkIdentifier, tkAssign, tkNumber, tkPoint, tkIdentifier, tkSemiColon],
+      GetTokensNoJunk('S := 1.ToString;'),
+      'Method call on an integer literal');
+
+  S := '1.ToString';
+  FPasLexer.SetData(S);
+  CheckTokenAt(tkNumber, '1', 1, 1, 'Number before the point');
+  FPasLexer.NextToken;
+  CheckTokenAt(tkPoint, '.', 1, 2, 'Point after the number');
+  FPasLexer.NextToken;
+  CheckTokenAt(tkIdentifier, 'ToString', 1, 3, 'Identifier after the point');
+
+  // dcc32 reports "Undeclared identifier" for e5, E5, _5 and e: the exponent letter is not part of the number
+  CheckTokensEqual([tkNumber, tkPoint, tkIdentifier], GetTokens('1.e5'), 'Lowercase exponent letter after the point');
+  CheckTokensEqual([tkNumber, tkPoint, tkIdentifier], GetTokens('1.E5'), 'Uppercase exponent letter after the point');
+  CheckTokensEqual([tkNumber, tkPoint, tkIdentifier], GetTokens('1._5'), 'Underscore after the point');
+  CheckTokensEqual([tkNumber, tkPoint, tkIdentifier, tkPlus, tkNumber], GetTokens('10.e+45'),
+      'Signed exponent after the point');
+  CheckTokensEqual([tkNumber, tkPoint, tkType], GetTokens('1.type'), 'Keyword after the point');
+  CheckTokensEqual([tkNumber, tkPoint, tkIdentifier], GetTokens('1_000.MaxValue'),
+      'Digit separator before the point');
+  CheckTokensEqual([tkFloat, tkPoint, tkIdentifier], GetTokens('1.5.ToString'), 'Method call on a real literal');
+  CheckTokensEqual([tkFloat, tkPoint, tkIdentifier], GetTokens('1e5.ToString'),
+      'Method call on a real literal with an exponent');
+
+  // Any other character after the point makes a real number, the next token is separate
+  CheckTokensEqual([tkFloat], GetTokens('1.'), 'Point at the end of the data');
+  CheckTokensEqual([tkFloat, tkSemiColon], GetTokens('1.;'), 'Point before a semicolon');
+  CheckTokensEqual([tkFloat, tkSpace, tkIdentifier], GetTokens('1. ToString'), 'Point before a space');
+  CheckTokensEqual([tkFloat, tkSymbol, tkIdentifier], GetTokens('1.&ToString'), 'Point before an ampersand');
+  CheckTokensEqual([tkFloat, tkIdentifier], GetTokens('1.' + #$00C4), 'Point before a non-ASCII letter');
+  CheckTokensEqual([tkFloat, tkInteger], GetTokens('1.$5'), 'Point before a hexadecimal number');
+  CheckTokensEqual([tkFloat, tkAsciiChar], GetTokens('1.#5'), 'Point before a character code');
+end;
+
+procedure TestTPasLexerAdditional.TestAsmDoubleQuotedStrings;
+var
+  S: string;
+  State: TPasLexerState;
+begin
+  // System.AnsiStrings.pas: the single quote inside the double quotes does not start a string
+  S := 'asm' + sLineBreak + '  CMP AL,"''"  // quote' + sLineBreak + 'end;';
+  CheckTokensEqual([tkAsm, tkIdentifier, tkIdentifier, tkComma, tkString, tkEnd, tkSemiColon], GetTokensNoJunk(S),
+      'Double-quoted single quote');
+  FPasLexer.SetData(S);
+  FPasLexer.NextTokenWithKind(tkString);
+  CheckTokenAt(tkString, '"''"', 2, 10, 'BASM string');
+  FPasLexer.NextToken;
+  FPasLexer.NextToken;
+  CheckTokenAt(tkSingleLineComment, '// quote', 2, 15, 'Comment after the BASM string');
+
+  // Comment openers and brackets inside double quotes are text of the string
+  CheckTokensEqual(
+      [tkAsm, tkIdentifier, tkString, tkComma, tkString, tkComma, tkString, tkComma, tkString, tkComma, tkString, tkEnd],
+      GetTokensNoJunk('asm DB "a''b", "", "{", "(*", "//" end'),
+      'Double-quoted strings with quotes and comment openers');
+  State := FPasLexer.LexerState;
+  CheckTrue(State.CommentState = csNo, 'Comment state after the block');
+  CheckEquals(0, State.Counters.RoundCount, 'Round brackets after the block');
+
+  // Like Delphi, there are no escapes: "a""b" is two strings
+  CheckTokensEqual([tkAsm, tkIdentifier, tkString, tkString, tkEnd], GetTokensNoJunk('asm DB "a""b" end'),
+      'Doubled double quote');
+  CheckTokensEqual([tkAsm, tkIdentifier, tkUnterminatedString, tkEnd, tkSemiColon],
+      GetTokensNoJunk('asm DB "abc' + sLineBreak + 'end;'), 'Double-quoted string ends at the line end');
+  CheckTokensEqual([tkAsm, tkIdentifier, tkString, tkEnd], GetTokensNoJunk('asm DB ''a"b'' end'),
+      'Single-quoted string with a double quote inside an asm block');
+
+  // Outside asm blocks a double quote stays a symbol
+  CheckTokensEqual([tkSymbol, tkIdentifier, tkSymbol], GetTokens('"a"'), 'Double quotes outside an asm block');
+  CheckTokensEqual(
+      [tkBegin, tkAsm, tkIdentifier, tkIdentifier, tkComma, tkString, tkEnd, tkSemiColon, tkIdentifier, tkAssign,
+      tkSymbol, tkIdentifier, tkSymbol, tkSemiColon, tkEnd, tkSemiColon],
+      GetTokensNoJunk('begin asm CMP AL,"''" end; S := "x"; end;'),
+      'Double quotes after an asm statement');
+end;
+
+procedure TestTPasLexerAdditional.TestAsmBlockFlag;
+var
+  S: string;
+  State: TPasLexerState;
+begin
+  S := 'begin asm NOP end end';
+  FPasLexer.SetData(S);
+  CheckFalse(FPasLexer.LexerState.IsAsmBlock, 'Before asm');
+  FPasLexer.NextTokenWithKind(tkAsm);
+  CheckTrue(FPasLexer.LexerState.IsAsmBlock, 'After asm');
+  FPasLexer.NextTokenWithKind(tkEnd);
+  CheckFalse(FPasLexer.LexerState.IsAsmBlock, 'After the end of the block');
+
+  // Vcl.Graphics.pas: BASM labels named @@END do not end the block
+  CheckTokensEqual(
+      [tkAsm, tkIdentifier, tkAddressSymbol, tkAddressSymbol, tkEnd, tkAddressSymbol, tkAddressSymbol, tkEnd, tkColon,
+      tkIdentifier, tkIdentifier, tkComma, tkString, tkEnd],
+      GetTokensNoJunk('asm JMP @@END' + sLineBreak + '@@END: CMP AL,"x"' + sLineBreak + 'end'),
+      'Label named end inside an asm block');
+
+  // '&asm' is an identifier
+  CheckTokensEqual([tkSymbol, tkAsm, tkAssign, tkSymbol, tkIdentifier, tkSymbol, tkSemiColon],
+      GetTokensNoJunk('&asm := "x";'), 'Escaped asm');
+  CheckFalse(FPasLexer.LexerState.IsAsmBlock, 'After an escaped asm');
+
+  // The flag is a part of the lexer state
+  S := 'asm "a" end';
+  FPasLexer.SetData(S);
+  State := FPasLexer.LexerState;
+  FPasLexer.NextTokenWithKind(tkEnd);
+  FPasLexer.LexerState := State;
+  CheckTrue(FPasLexer.LexerState.IsAsmBlock, 'Restored lexer state');
+  FPasLexer.NextTokenNoJunk;
+  CheckTokenAt(tkString, '"a"', 1, 5, 'BASM string after the restored state');
+  S := '"a"';
+  FPasLexer.SetData(S);
+  CheckTokenAt(tkSymbol, '"', 1, 1, 'Double quote after SetData');
 end;
 
 initialization

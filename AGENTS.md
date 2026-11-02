@@ -13,7 +13,7 @@ Repository layout:
   - `uPasLexer.pas`, `uPasLexerTypes.pas` — the lexer `TPasLexer`, token kinds
     and the keyword table.
   - `uPasParser.pas`, `uPasParserGrammar.pas`, `uPasParserTypes.pas` — the
-    parser (work in progress, see section 3).
+    parser (see section 3).
   - `uPasExceptions.pas` — lexer and parser exception classes.
   - `uPasParserSettings.pas` — a stub for future parser settings; not used yet.
   - `uPasLexerPerformance.pas` — measurement tools (`THighResolutionStopwatch`,
@@ -295,15 +295,76 @@ the first token. In addition:
 - **End of input is the terminating `#0`** of the Delphi string (`#0` is
   dispatched to `NullHandler`, which yields `tkEOF`); a `#0` inside the text
   also ends tokenization.
+- **Compiler directives.** `{$` ends only at `}` and `(*$` only at `*)`;
+  quotes inside are not taken into account, as in Delphi
+  (`(*$HPPEMIT '{}'*)` is one directive). A directive is one
+  `tkCompilerDirective` token even when it spans several lines: its line
+  breaks are counted in `DirectiveLineBreakCount` / `DirectiveLineStartPos`,
+  and `NextToken` gives the next token its real line and line start.
+- **Conditional directives.** `IfDirectiveStateArray` holds an `idsIf` entry
+  for every open `{$IF...}` level (never replaced), followed by one
+  `idsElseIf` / `idsElse` entry for every branch met so far.
+  `IfDirectiveSavedCountersArray` runs parallel; only its entries at the
+  `idsIf` indexes are used (bracket counters at the start of the level and at
+  the end of its first branch), and every other branch must end with the
+  counters of the first one. A token is in the first branch of every level
+  when all entries are `idsIf`; `TPasParser` and
+  `NextTokenNoDirectiveBranching` rely on that. A repeated `{$ELSE}` is valid
+  (Delphi compiles it), `{$ELSEIF}` after `{$ELSE}` raises "Unexpected ELSE"
+  (E2029 in Delphi). With `IgnoreCompilerDirectiveChecks` a directive that
+  matches no open level is skipped.
+- **Numbers.** `_` is the digit separator of Delphi 11 (decimal, real, hex
+  `$FF_FF`, character codes `#1_0`); a binary number `%1010_0101` is one
+  `tkInteger`. A number followed by `.` and an ASCII letter or `_` ends before
+  the point (`1.ToString` is number, point, identifier); any other character
+  after the point keeps a real (`1.`). `&17` is `tkSymbol` + `tkNumber`: the
+  decimal 17, Delphi has no octal literals.
+- **Asm blocks** are tokenized like other code. `IsAsmBlock` is set by `asm`
+  (not by `&asm`) and cleared by `end`, except an `end` right after `@` (BASM
+  labels like `@@END`). Inside an asm block `"` starts a BASM string
+  (`tkString` up to the next `"`, no escapes); elsewhere `"` is `tkSymbol`.
+- **Check Delphi's own behavior with dcc32** before changing a lexing rule:
+  write a tiny `program` in the scratchpad and compile it with
+  `dcc32 -Q -NSSystem Probe.dpr` after `rsvars.bat`. The Delphi 11 sources
+  (`C:\Program Files (x86)\Embarcadero\Studio\22.0\source`, about 2100 `.pas`
+  files) are the regression corpus: lexing all of them gives no lexer error
+  except Indy10 `IdStackWindows.pas` (a real missing `)` in a dead branch,
+  lines 1591 and 1604).
 
-### Parser (work in progress)
+### Parser
 
 `TPasParser` (`uPasParser.pas`) loads a file or a string (`ParseFile`,
 `ParseString`), feeds it to its own `TPasLexer` and builds a tree of grammar
 nodes derived from `TBaseLexemeNode` (`uPasParserGrammar.pas`). Shared types
-live in `uPasParserTypes.pas`; errors are raised with the exception classes
-from `uPasExceptions.pas`. The parser is under active development and is not
-covered by unit tests yet (the tests use only `TPasParser.GetFileDataString`).
+live in `uPasParserTypes.pas`. The parser exists to check the code style of
+files, so it keeps the layout of the source:
+
+- **Two token lists.** `SourceTokenItem` holds every token of the source,
+  `ParsedStateItem` only the tokens of the parsed code: compiler directives
+  are dropped, and of every conditional directive only the first branch is
+  kept (no defines are evaluated). Both carry layout fields computed from the
+  text (`CurrentLine`, `Column`, `SpaceBefore`, `SpaceAfter`, `IsFirstOnLine`,
+  `IsLastOnLine`, `SourceTokenIndex`); `LineItem` describes the lines.
+- **Node ranges.** A node covers the parsed states from its first to its last
+  significant token. Tokens not covered by its children are its own tokens
+  (`GetOwnTokenIndexes`, `FindOwnToken`). Nodes recognized after their first
+  part (binary expressions, ranges) are created with `CreateWrapping`.
+- **Recursive descent.** All nodes of a tree share one `TLexemeCursor` over
+  the significant tokens; a node parses itself in `InternalParseItself` and
+  leaves the cursor at the first token after itself. The shared parsing
+  helpers (`ParseExpression`, `ParseType`, `ParseStatement`,
+  `ParseDeclarations`...) are protected methods of `TBaseLexemeNode`.
+- **Errors.** A syntax error raises `EPasGrammarParserException` inside the
+  parser; `ParseString`/`ParseFile` catch it (and lexer errors), return False
+  and report it in `ErrorItem`, `RootLexeme` is then nil.
+- **Asm statements are not parsed:** `TAsmStatementLexemeNode` skips the
+  tokens up to the first `end` that does not follow `@`.
+- **Known limits.** Mutually exclusive blocks
+  (`{$IFDEF MSWINDOWS}...{$ENDIF}{$IFDEF POSIX}...{$ENDIF}`) are both parsed
+  under the first-branch rule and can give syntax errors; `{$I}` include
+  files are not expanded. Of the 1613 units of the Delphi 11 RTL, VCL, FMX,
+  data, SOAP, XML and DUnit sources 1567 parse; the others fail for these
+  reasons, for .NET-only (CLR) code or for invalid code in dead branches.
 
 ### Performance rules
 
@@ -314,8 +375,10 @@ but must avoid needless work.
 
 **Measure every change of the lexer hot path** with the console benchmark
 (section 5, "Measuring lexer speed"): run it before and after the change and
-put both `MedianMs` values into your report. The change must not raise
-`MedianMs` beyond run-to-run noise.
+put both `MedianMs` values into your report. **If `MedianMs` gets more than
+2 % worse, stop and ask the user** whether to keep the change: give both
+values and the result of the code layout check, and do not decide on your
+own, also when the layout may explain the difference.
 
 - **No allocations on the hot path.** `NextToken` and all `*Handler` methods
   must not allocate strings, objects, or dynamic arrays. Token text is produced
@@ -343,6 +406,20 @@ put both `MedianMs` values into your report. The change must not raise
   message strings instead of building them per call.
 - **Do not add indirection that a benchmark would notice** — no interfaces,
   virtual calls, or RTTI in the lexing loop.
+- **No nested routine may touch a local of a hot loop.** A local that a
+  nested routine reads or writes cannot live in a register in its parent: in
+  a scanner loop this cost ~28 %. Pass values as parameters or inline the
+  code.
+- **Code layout moves the speed.** The speed of the hot routines depends on
+  their offset within a 64-byte block. `uPasLexer` has `{$CODEALIGN 16}`
+  (16 is the largest value Delphi 11 accepts, 32 and 64 give E1030): with it
+  the layout alone moves `MedianMs` by ~2–2.5 % instead of up to 8 % on Win32
+  (Win64 aligns routines to 16 bytes anyway). Everything linked before the
+  lexer shifts it: `uPasLexer` uses `uPasExceptions`, whose interface uses
+  the parser units, so all parser code is linked before the lexer and every
+  parser edit moves it. New fields or public methods of the lexer classes
+  shift all routines too (RTTI and VMT come first in the unit's code). New
+  fields of `TPasLexerState` go after the hot fields.
 - **Keep the 64-bit build in mind.** Both Win32 and Win64 are built and
   tested; use `NativeInt`/`NativeUInt` for pointer-sized values and never
   cast pointers to `Integer`/`Cardinal`.
@@ -361,6 +438,11 @@ put both `MedianMs` values into your report. The change must not raise
   use its helpers (`GetTokens`, `GetTokensNoJunk`, `CheckTokensEqual`,
   `CheckTokenEquals`). Tests that read files from `UnitTests/TestData/` go
   into `UnitTests/TestuPasLexer.pas`.
+- Parser tests (fragments and files) go into `UnitTests/TestuPasParser.pas`
+  and use its helpers (`MakeUnit`, `MakeStatements`, `CheckParsed`,
+  `CheckParseError`, `FindNode`, `CountNodes`, `CheckBinary`). Every change of
+  the grammar comes with a test; `TestRepositorySources` parses the sources
+  of this repository, so new code here must stay parsable.
 - Test methods are named `Test<WhatIsChecked>` (e.g.
   `TestNumbersExponentAndHex`) and declared in the `published` section.
 - Build test data paths relative to the executable, as the existing tests do:
@@ -387,11 +469,16 @@ MSBuild. They work from cmd, PowerShell (`.\test.cmd`) and Git Bash
 - `test.cmd [Platform]` — builds `UnitTests\PasLexerTests.dproj` in the
   `Console` configuration and runs the tests. `Platform` is `Win32`
   (default) or `Win64`.
-- `build.cmd [Project] [Config] [Platform]` — builds one project. `Project`
-  is a path relative to the repository root, with `\` or `/` separators
-  (default `PascalLexerGroup.groupproj`); `Config` is `Debug` (default),
-  `Release` or `Console` (tests only); `Platform` is `Win32` (default) or
-  `Win64`. Example: `build.cmd TestApp/TestApp.dproj Debug Win64`.
+- `build.cmd [Project] [Config] [Platform] [map]` — builds one project.
+  `Project` is a path relative to the repository root, with `\` or `/`
+  separators (default `PascalLexerGroup.groupproj`); `Config` is `Debug`
+  (default), `Release` or `Console` (tests only); `Platform` is `Win32`
+  (default) or `Win64`. Example: `build.cmd TestApp/TestApp.dproj Debug Win64`.
+  The optional fourth parameter `map` also writes a detailed map file (`.map`)
+  next to the executable in `Exe\` (MSBuild property `DCC_MapFile=3`, the
+  `.dproj` stays unchanged); it is used to check the code layout of the
+  benchmark (section 5, "Measuring lexer speed"). Any other value of the
+  fourth parameter is an error.
 - Exit code 0 means success. On another machine set `DELPHI_RSVARS` (path to
   `rsvars.bat` of Delphi 11) and `MSBUILD_EXE` (path to `MSBuild.exe`).
 
@@ -422,8 +509,9 @@ the same token count. The warm-up lasts until both a minimum pass count and a
 minimum duration are reached: an idle CPU needs up to ~10 ms to reach its full
 clock, and passes started earlier are up to ~2 times slower.
 
-- Build in `Release Win32` — the variant to compare numbers in:
-  `build.cmd Benchmark/LexerBenchmark.dproj Release Win32`.
+- Build in `Release Win32` — the variant to compare numbers in — with a map
+  file for the layout check:
+  `build.cmd Benchmark/LexerBenchmark.dproj Release Win32 map`.
 - Run `Exe\LexerBenchmark.exe` (defaults: warm-up of at least 10 passes and
   at least 200 ms, then 500 measured passes over
   `UnitTests\TestData\VirtualTrees.pas`, about 3 s). Switches (`-` or `/`,
@@ -437,10 +525,31 @@ clock, and passes started earlier are up to ~2 times slower.
   `MedianMBPerSecond`, `MedianMTokensPerSecond`; with `-trace` also
   `PassMs[N]` for every measured pass), ending with `Result: OK`.
   `WarmupPasses` and `WarmupMs` are the actual warm-up.
-- Compare `MedianMs` (lower is better). Back-to-back runs differ by about
-  0.5 %, single passes by up to ±10-15 %, but series taken at different times
-  differ by up to ~4 % because of other load on the machine. Compare variants
-  only within one series: run each variant several times, alternating them.
+- Compare `MedianMs` (lower is better). Back-to-back runs usually differ by
+  0.5–1 % (up to 2–3 % on a busy machine), single passes by up to ±10-15 %,
+  and series taken at different times differ by up to ~4 % because of other
+  load on the machine. Compare variants only within one series: **run each
+  variant 8 times**, alternating them (every round starts with the other
+  variant than the previous one), and compare the medians of the 8 `MedianMs`
+  values of each variant. A slowdown of more than 2 % needs the user's
+  decision (section 3, "Measure every change of the lexer hot path").
+- **Check the code layout** (see "Code layout moves the speed" in section 3):
+  build both variants with the `map` parameter of `build.cmd` and compare the
+  offsets modulo 64 of `NextToken`, `GetIdentifierKindWithTree`,
+  `IdentifierHandler`, `SpaceHandler` and `CRHandler` (lines like
+  `0001:000E9330 uPasLexer.TPasLexer.NextToken` in `Exe\LexerBenchmark.map`).
+  If they differ, up to ~2.5 % of the difference can come from the layout
+  alone: say so in the report. The same layout built twice reproduces within
+  ~0.2 %. The map file belongs to the last build with `map`, a later build
+  without it leaves it stale: rebuild with `map` right before reading it.
+- **The "before" variant** of a comparison: export the commit into the
+  scratchpad (`git archive <commit> | tar -x -C <folder>`), copy into it
+  `Source/ThirdParty/FastMM5/FastMM5.pas` (archives and worktrees do not
+  contain the submodule) and the current `build.cmd` (older commits do not
+  have its `map` parameter), and build the copy with
+  `build.cmd Benchmark/LexerBenchmark.dproj Release Win32 map`; its
+  executable and map file are in the copy's `Exe\`. Run both executables with
+  an explicit `-file`.
 - Exit codes: 0 success, 1 input file not found, 2 invalid parameter,
   3 lexer error (exception, unbalanced counters or a changed token count),
   4 unexpected error. On failure the error goes to stderr and stdout ends with

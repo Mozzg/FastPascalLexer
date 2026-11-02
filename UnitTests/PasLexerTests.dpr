@@ -3,8 +3,8 @@
   Delphi DUnit Test Project
   -------------------------
   This is the single main unit test project for the FastPascalLexer repository.
-  It registers and runs the complete test suite (TestuPasLexer plus
-  TestuPasLexerAdditional) through the DUnit framework.
+  It registers and runs the complete test suite (TestuPasLexer,
+  TestuPasLexerAdditional and TestuPasParser) through the DUnit framework.
 
   Configurations:
   - Debug / Release build the visual DUnit GUI test runner window — the
@@ -32,6 +32,7 @@ uses
   uPasParser in '..\Source\uPasParser.pas',
   TestuPasLexer in 'TestuPasLexer.pas',
   TestuPasLexerAdditional in 'TestuPasLexerAdditional.pas',
+  TestuPasParser in 'TestuPasParser.pas',
   uPasExceptions in '..\Source\uPasExceptions.pas',
   uPasParserTypes in '..\Source\uPasParserTypes.pas',
   uPasParserGrammar in '..\Source\uPasParserGrammar.pas',

@@ -1,5 +1,5 @@
 ﻿(*******************************************************************************
-*  Copyright © 2025 Pervov Evgeny                                              *
+*  Copyright © 2025 - 2026 Pervov Evgeny                                       *
 *                                                                              *
 *  Licensed under the Apache License, Version 2.0 (the "License");             *
 *  you may not use this file except in compliance with the License.            *
@@ -21,13 +21,18 @@
 *  Created: 16.03.2025                                                         *
 *  Class: TPasLexer                                                            *
 *  Description: Very fast pascal tokenizer/lexer                               *
-*  Version: 0.3                                                                *
-*  Last modified: 01.11.2026                                                   *
+*  Version: 0.4                                                                *
+*  Last modified: 02.11.2026                                                   *
 *  Contributor(s):                                                             *
 *    Pervov Evgeny <operationm@list.ru>                                        *
 *******************************************************************************)
 
 unit uPasLexer;
+
+// Every routine of the unit starts at a 16-byte boundary, as Win64 does by default (Win32 aligns to 4 bytes). The speed
+// of the hot routines depends on their offset in a 64-byte block, so with 4-byte alignment any change of the code linked
+// before them moved the benchmark by up to 8 %, with 16-byte alignment by about 2 %. 16 is the largest allowed value.
+{$CODEALIGN 16}
 
 interface
 
@@ -55,7 +60,18 @@ type
     IsCompilerDirective: Boolean;
     IgnoreCompilerDirectiveChecks: Boolean;
     WasLineChange: Boolean;
+    // True between 'asm' and the 'end' of its block: a double quote starts a BASM string there
+    IsAsmBlock: Boolean;
+    // Line breaks inside the current compiler directive token: the next NextToken adds them to CurrentLine instead of
+    // one line for WasLineChange. Placed after the hot fields: moving those fields slows the lexer down.
+    DirectiveLineBreakCount: Cardinal;
+    // Start of the line after the last line break inside the current compiler directive token
+    DirectiveLineStartPos: Cardinal;
+    // Branches of the open conditional directives: every {$IF...} level starts with an idsIf entry, followed by an
+    // idsElseIf or idsElse entry for every {$ELSEIF} or {$ELSE} branch met so far
     IfDirectiveStateArray: TArray<TIfDirectiveState>;
+    // Parallel to IfDirectiveStateArray; only the entries at the idsIf indexes are used: the counters at the start of
+    // the level and at the end of its first branch
     IfDirectiveSavedCountersArray: TArray<TPasLexerSavedCounters>;
 
     procedure Reset;
@@ -81,7 +97,10 @@ type
     procedure SpaceHandler;
     procedure AsciiCharHandler;
     procedure HexNumberHandler;
+    procedure BinaryNumberHandler;
     procedure StringHandler;
+    // A string in double quotes inside an asm block, a symbol elsewhere
+    procedure DoubleQuoteHandler;
     procedure NumberHandler;
     procedure IdentifierHandler;
     procedure CurlyOpenHandler;
@@ -104,11 +123,28 @@ type
     procedure PointerSymbolHandler;
     procedure SymbolHandler;
     procedure UnknownHandler;
-    procedure CompilerDirectiveHandler;
+    // Reads a compiler directive after '{$' (ABracketKind = csCurly) or '(*$' (ABracketKind = csStarParen)
+    procedure CompilerDirectiveHandler(ABracketKind: TCommentState);
+
+    // Conditional directives, called by CompilerDirectiveHandler. Kept next to it on purpose: declared after
+    // GetIdentifierKindWithTree, they moved its code off a 64-byte boundary and LexerBenchmark got ~6 % slower.
+
+    // Index of the idsIf entry of the innermost open conditional level, -1 if there is none
+    function FindIfDirectiveLevelStart: Integer;
+    // {$IF}, {$IFDEF}, {$IFNDEF}, {$IFOPT}: opens a conditional level
+    procedure OpenIfDirectiveLevel;
+    // {$ELSEIF} (ABranchState = idsElseIf) or {$ELSE} (idsElse): ends the current branch and starts the next one.
+    // Every branch must leave the bracket counters as the first one does.
+    procedure StartElseDirectiveBranch(ABranchState: TIfDirectiveState);
+    // {$ENDIF}, {$IFEND}: closes the innermost conditional level
+    procedure CloseIfDirectiveLevel;
+
     // PostIdentifierHandlers
     procedure PropertyPostHandler(var AToken: TTokenKind);
     procedure PropertyDirectivePostHandler(var AToken: TTokenKind);
     procedure EndPostHandler(var AToken: TTokenKind);
+    // Marks the start of an asm block for DoubleQuoteHandler
+    procedure AsmPostHandler(var AToken: TTokenKind);
     procedure BlankPostHandler(var AToken: TTokenKind);
 
     function GetIdentifierKindWithTree: TTokenKind;
@@ -292,14 +328,15 @@ begin
   Inc(FLexerState.CurrentIndex);
   FLexerState.CurrentToken := tkAsciiChar;
 
+  // '_' is the digit separator of Delphi 11, allowed anywhere after '#' and '#$': #1_0, #$00_41
   if FStartPtr[FLexerState.CurrentIndex] = '$' then
   begin
     Inc(FLexerState.CurrentIndex);
-    while CharInSet(FStartPtr[FLexerState.CurrentIndex], ['0'..'9', 'A'..'F', 'a'..'f']) do
+    while CharInSet(FStartPtr[FLexerState.CurrentIndex], ['0'..'9', 'A'..'F', 'a'..'f', '_']) do
       Inc(FLexerState.CurrentIndex);
   end
   else
-    while FStartPtr[FLexerState.CurrentIndex].IsDigit do
+    while FStartPtr[FLexerState.CurrentIndex].IsDigit or (FStartPtr[FLexerState.CurrentIndex] = '_') do
       Inc(FLexerState.CurrentIndex);
 end;
 
@@ -307,8 +344,26 @@ procedure TPasLexer.HexNumberHandler;
 begin
   Inc(FLexerState.CurrentIndex);
   FLexerState.CurrentToken := tkInteger;
-  while CharInSet(FStartPtr[FLexerState.CurrentIndex], ['0'..'9', 'A'..'F', 'a'..'f']) do
+  // '_' is the digit separator of Delphi 11: $FFFF_FFFF
+  while CharInSet(FStartPtr[FLexerState.CurrentIndex], ['0'..'9', 'A'..'F', 'a'..'f', '_']) do
     Inc(FLexerState.CurrentIndex);
+end;
+
+procedure TPasLexer.BinaryNumberHandler;
+begin
+  Inc(FLexerState.CurrentIndex);
+  // A percent sign not followed by a binary digit or a digit separator is not a number
+  if not CharInSet(FStartPtr[FLexerState.CurrentIndex], ['0', '1', '_']) then
+  begin
+    FLexerState.CurrentToken := tkSymbol;
+    Exit;
+  end;
+
+  // Binary literal of Delphi 11: %1010_0101
+  FLexerState.CurrentToken := tkInteger;
+  repeat
+    Inc(FLexerState.CurrentIndex);
+  until not CharInSet(FStartPtr[FLexerState.CurrentIndex], ['0', '1', '_']);
 end;
 
 procedure TPasLexer.StringHandler;
@@ -335,6 +390,36 @@ begin
   end;
 end;
 
+procedure TPasLexer.DoubleQuoteHandler;
+begin
+  Inc(FLexerState.CurrentIndex);
+  // Like Delphi, a double quote is an illegal character outside asm blocks
+  if not FLexerState.IsAsmBlock then
+  begin
+    FLexerState.CurrentToken := tkSymbol;
+    Exit;
+  end;
+
+  // BASM string: no escapes, it ends at the next double quote or at the line end at the latest
+  FLexerState.CurrentToken := tkString;
+  while True do
+  begin
+    case FStartPtr[FLexerState.CurrentIndex] of
+      '"':
+      begin
+        Inc(FLexerState.CurrentIndex);
+        Break;
+      end;
+      #0, #10, #13:
+      begin
+        FLexerState.CurrentToken := tkUnterminatedString;
+        Break;
+      end;
+    end;
+    Inc(FLexerState.CurrentIndex);
+  end;
+end;
+
 procedure TPasLexer.NumberHandler;
 var
   WasExponent: Boolean;
@@ -348,7 +433,8 @@ begin
   while True do
   begin
     case FStartPtr[FLexerState.CurrentIndex] of
-      '0'..'9':
+      // '_' is the digit separator of Delphi 11: 1_000, 1_000.000_1, 1e1_0
+      '0'..'9', '_':
         Inc(FLexerState.CurrentIndex);
       'e', 'E':
       begin
@@ -369,9 +455,11 @@ begin
       end;
       '.':
       begin
-        // A dot after the exponent ('1e33.3') is not part of the number.
-        if (FStartPtr[FLexerState.CurrentIndex + 1] = '.') or (FStartPtr[FLexerState.CurrentIndex + 1] = ')')
-            or WasPoint or WasExponent
+        // A dot after the fraction ('1.5.6') or the exponent ('1e33.3') is not part of the number. Like in Delphi, neither
+        // is a dot followed by '.', ')', an ASCII letter or '_': 1..2, (.1.), 1.ToString, 1.e5 is 1 . e5.
+        // Any other character after the dot ('1.', '1.&X', '1.Ä') makes a real number.
+        if WasPoint or WasExponent
+            or CharInSet(FStartPtr[FLexerState.CurrentIndex + 1], ['.', ')', 'A'..'Z', 'a'..'z', '_'])
         then
           Break;
 
@@ -395,12 +483,11 @@ end;
 
 procedure TPasLexer.CurlyOpenHandler;
 begin
-  // +++ проверить токены если директива компилятора на нескольких строках
   if FStartPtr[FLexerState.CurrentIndex + 1] = '$' then
   begin
     FLexerState.CurrentToken := tkCompilerDirective;
     Inc(FLexerState.CurrentIndex, 2);
-    CompilerDirectiveHandler;
+    CompilerDirectiveHandler(csCurly);
     Exit;
   end;
 
@@ -437,7 +524,7 @@ begin
       begin
         FLexerState.CurrentToken := tkCompilerDirective;
         Inc(FLexerState.CurrentIndex, 2);
-        CompilerDirectiveHandler;
+        CompilerDirectiveHandler(csStarParen);
         Exit;
       end;
 
@@ -649,11 +736,9 @@ begin
   FLexerState.CurrentToken := tkUnknown;
 end;
 
-procedure TPasLexer.CompilerDirectiveHandler;
+procedure TPasLexer.CompilerDirectiveHandler(ABracketKind: TCommentState);
 var
   CompilerToken: TTokenKind;
-  DirectiveStateLength, DirectiveCountersLength, i, j: Integer;
-  FoundCounters: Boolean;
 begin
   if FLexerState.CurrentToken = tkCompilerDirective then
   begin
@@ -663,169 +748,42 @@ begin
 
     case CompilerToken of
       tkIfDefDirective, tkIfNDefDirective, tkIf, tkIfOptDirective:
-      begin
-        Inc(FLexerState.Counters.IfDirectiveCount);
-        // Add indication to IfDirectiveStateArray
-        SetLength(FLexerState.IfDirectiveStateArray, Length(FLexerState.IfDirectiveStateArray) + 1);
-        FLexerState.IfDirectiveStateArray[High(FLexerState.IfDirectiveStateArray)] := idsIf;
-        // Add current counters state as start of directive to IfDirectiveSavedCountersArray
-        SetLength(FLexerState.IfDirectiveSavedCountersArray, Length(FLexerState.IfDirectiveSavedCountersArray) + 1);
-        FLexerState.IfDirectiveSavedCountersArray[High(FLexerState.IfDirectiveSavedCountersArray)].StartCounters := FLexerState.Counters;
-      end;
-      tkElseIfDirective, tkElse:
-      begin
-        DirectiveStateLength := Length(FLexerState.IfDirectiveStateArray);
-        DirectiveCountersLength := Length(FLexerState.IfDirectiveSavedCountersArray);
-
-        if FLexerState.Counters.IfDirectiveCount <= 0 then
-          RaiseCompilerDirectiveException(EMESSAGE_UNEXPECTED_ELSE_DIRECTIVE)
-        else if (DirectiveStateLength <> DirectiveCountersLength) or (DirectiveStateLength = 0) or (DirectiveCountersLength = 0) then
-          RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH)
-        else if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] = idsElse then
-          RaiseCompilerDirectiveException(EMESSAGE_UNEXPECTED_ELSE_DIRECTIVE);
-
-        // Save counters at end of main if to compare to others later
-        if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] = idsIf then
-          FLexerState.IfDirectiveSavedCountersArray[High(FLexerState.IfDirectiveSavedCountersArray)].EndCounters := FLexerState.Counters;
-
-        FoundCounters := False;
-        if CompilerToken = tkElseIfDirective then
-        begin
-          // Check if we need to compare counters
-          if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] <> idsIf then
-            for i := High(FLexerState.IfDirectiveStateArray) downto Low(FLexerState.IfDirectiveStateArray) do
-              if FLexerState.IfDirectiveStateArray[i] = idsIf then
-              begin
-                if not CompareMem(@FLexerState.Counters,
-                    @FLexerState.IfDirectiveSavedCountersArray[i].EndCounters, SizeOf(TPasLexerStateCounters))
-                then
-                  RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
-                Break;
-              end;
-
-          SetLength(FLexerState.IfDirectiveStateArray, DirectiveStateLength + 1);
-          SetLength(FLexerState.IfDirectiveSavedCountersArray, DirectiveCountersLength + 1);
-          Inc(DirectiveStateLength);
-
-          FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] := idsElseIf;
-
-          // Restore counters like at the start of if directive
-          for i := High(FLexerState.IfDirectiveStateArray) downto Low(FLexerState.IfDirectiveStateArray) do
-            if FLexerState.IfDirectiveStateArray[i] = idsIf then
-            begin
-              FLexerState.Counters := FLexerState.IfDirectiveSavedCountersArray[i].StartCounters;
-              FoundCounters := True;
-              Break;
-            end;
-        end
-        else  // CompilerToken = tkElse
-        begin
-          // Restore counters like at the start of if directive
-          for i := High(FLexerState.IfDirectiveStateArray) downto Low(FLexerState.IfDirectiveStateArray) do
-            if FLexerState.IfDirectiveStateArray[i] = idsIf then
-            begin
-              FLexerState.Counters := FLexerState.IfDirectiveSavedCountersArray[i].StartCounters;
-              FoundCounters := True;
-              Break;
-            end;
-
-          if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] = idsElseIf then
-          begin
-            SetLength(FLexerState.IfDirectiveStateArray, DirectiveStateLength + 1);
-            SetLength(FLexerState.IfDirectiveSavedCountersArray, DirectiveCountersLength + 1);
-            Inc(DirectiveStateLength);
-          end;
-          FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] := idsElse;
-        end;
-
-        if not FoundCounters then
-          RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_NOTFOUND_ON_RESTORE);
-      end;
+        OpenIfDirectiveLevel;
+      tkElseIfDirective:
+        StartElseDirectiveBranch(idsElseIf);
+      tkElse:
+        StartElseDirectiveBranch(idsElse);
       tkEndIfDirective, tkIfEndDirective:
-      begin
-        DirectiveStateLength := Length(FLexerState.IfDirectiveStateArray);
-        DirectiveCountersLength := Length(FLexerState.IfDirectiveSavedCountersArray);
-
-        if (DirectiveStateLength <> DirectiveCountersLength) or (DirectiveStateLength = 0) or (DirectiveCountersLength = 0) then
-          RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH);
-
-        // Search for last if directive counters and compare to current. Also decrease state arrays.
-        if FLexerState.IfDirectiveStateArray[DirectiveStateLength - 1] = idsIf then
-        begin
-          // Decrease arrays
-          SetLength(FLexerState.IfDirectiveStateArray, DirectiveStateLength - 1);
-          SetLength(FLexerState.IfDirectiveSavedCountersArray, DirectiveCountersLength - 1);
-          Dec(DirectiveStateLength);
-          Dec(DirectiveCountersLength);
-        end
-        else
-        begin
-          FoundCounters := False;
-          j := DirectiveStateLength - 1;
-          if FLexerState.IfDirectiveStateArray[j] <> idsElseIf then
-          begin
-            Dec(j);
-            if (j < 0) or ((j >= 0) and (FLexerState.IfDirectiveStateArray[j] <> idsElseIf)) then
-            begin
-              FoundCounters := True;
-              Inc(j);
-            end;
-          end;
-
-          if not FoundCounters then
-            for i := j downto Low(FLexerState.IfDirectiveStateArray) do
-              if FLexerState.IfDirectiveStateArray[i] <> idsElseIf then
-              begin
-                j := i;
-                FoundCounters := True;
-              end;
-
-          if not FoundCounters then
-            RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_NOTFOUND_ON_RESTORE);
-
-          // Compare counters
-          if not CompareMem(@FLexerState.Counters,
-              @FLexerState.IfDirectiveSavedCountersArray[j].EndCounters, SizeOf(TPasLexerStateCounters))
-          then
-            RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
-          // Decrease arrays
-          SetLength(FLexerState.IfDirectiveStateArray, j);
-          SetLength(FLexerState.IfDirectiveSavedCountersArray, j);
-          DirectiveStateLength := j;
-          DirectiveCountersLength := j;
-        end;
-
-        Dec(FLexerState.Counters.IfDirectiveCount);
-
-        // Compare directive counter and array length, they must be equal at end directive
-        if (FLexerState.Counters.IfDirectiveCount <> DirectiveStateLength)
-            or (FLexerState.Counters.IfDirectiveCount <> DirectiveCountersLength)
-        then
-          RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH);
-      end;
+        CloseIfDirectiveLevel;
     end;
 
+    // Like Delphi, '{$' ends only at '}' and '(*$' only at '*)', quotes are not taken into account:
+    // (*$HPPEMIT '{}'*) is one directive
     while FLexerState.CurrentIndex < FLexerState.MaxIndex do
       case FStartPtr[FLexerState.CurrentIndex] of
         '}':
         begin
-          FLexerState.CommentState := csNo;
           Inc(FLexerState.CurrentIndex);
-          Break;
+          if ABracketKind = csCurly then
+            Break;
         end;
         '*':
         begin
           Inc(FLexerState.CurrentIndex);
-          if FStartPtr[FLexerState.CurrentIndex] = ')' then
+          if (ABracketKind = csStarParen) and (FStartPtr[FLexerState.CurrentIndex] = ')') then
           begin
-            FLexerState.CommentState := csNo;
             Inc(FLexerState.CurrentIndex);
             Break;
           end;
         end;
+        #0:
+          Break;
+        // A directive is one token even across lines: count every line break for the line tracking in NextToken
         #10:
         begin
           Inc(FLexerState.CurrentIndex);
+          Inc(FLexerState.DirectiveLineBreakCount);
+          FLexerState.DirectiveLineStartPos := FLexerState.CurrentIndex;
           FLexerState.WasLineChange := True;
         end;
         #13:
@@ -834,12 +792,111 @@ begin
             Inc(FLexerState.CurrentIndex, 2)
           else
             Inc(FLexerState.CurrentIndex);
+          Inc(FLexerState.DirectiveLineBreakCount);
+          FLexerState.DirectiveLineStartPos := FLexerState.CurrentIndex;
           FLexerState.WasLineChange := True;
         end
       else
         Inc(FLexerState.CurrentIndex);
       end;
   end;
+end;
+
+function TPasLexer.FindIfDirectiveLevelStart: Integer;
+begin
+  // The entries above the idsIf entry of a level are only its idsElseIf and idsElse entries
+  Result := High(FLexerState.IfDirectiveStateArray);
+  while (Result >= 0) and (FLexerState.IfDirectiveStateArray[Result] <> idsIf) do
+    Dec(Result);
+end;
+
+procedure TPasLexer.OpenIfDirectiveLevel;
+var
+  LevelIndex: Integer;
+begin
+  Inc(FLexerState.Counters.IfDirectiveCount);
+  LevelIndex := Length(FLexerState.IfDirectiveStateArray);
+  SetLength(FLexerState.IfDirectiveStateArray, LevelIndex + 1);
+  FLexerState.IfDirectiveStateArray[LevelIndex] := idsIf;
+  SetLength(FLexerState.IfDirectiveSavedCountersArray, LevelIndex + 1);
+  FLexerState.IfDirectiveSavedCountersArray[LevelIndex].StartCounters := FLexerState.Counters;
+end;
+
+procedure TPasLexer.StartElseDirectiveBranch(ABranchState: TIfDirectiveState);
+var
+  StateLength, LevelIndex: Integer;
+begin
+  // With IgnoreCompilerDirectiveChecks the exception is not raised: a directive that cannot be matched to an open
+  // level is skipped, other errors do not stop the bookkeeping
+  if FLexerState.Counters.IfDirectiveCount <= 0 then
+  begin
+    RaiseCompilerDirectiveException(EMESSAGE_UNEXPECTED_ELSE_DIRECTIVE);
+    Exit;
+  end;
+  StateLength := Length(FLexerState.IfDirectiveStateArray);
+  if (StateLength = 0) or (StateLength <> Length(FLexerState.IfDirectiveSavedCountersArray)) then
+  begin
+    RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH);
+    Exit;
+  end;
+  LevelIndex := FindIfDirectiveLevelStart;
+  if LevelIndex < 0 then
+  begin
+    RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_NOTFOUND_ON_RESTORE);
+    Exit;
+  end;
+
+  // Delphi accepts a repeated {$ELSE} (its branch is never compiled), but not {$ELSEIF} after {$ELSE} (E2029)
+  if (ABranchState = idsElseIf) and (FLexerState.IfDirectiveStateArray[StateLength - 1] = idsElse) then
+    RaiseCompilerDirectiveException(EMESSAGE_UNEXPECTED_ELSE_DIRECTIVE);
+
+  // The end of the first branch is saved, the end of every other branch is compared to it
+  if LevelIndex = StateLength - 1 then
+    FLexerState.IfDirectiveSavedCountersArray[LevelIndex].EndCounters := FLexerState.Counters
+  else if not CompareMem(@FLexerState.Counters, @FLexerState.IfDirectiveSavedCountersArray[LevelIndex].EndCounters,
+      SizeOf(TPasLexerStateCounters))
+  then
+    RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
+
+  SetLength(FLexerState.IfDirectiveStateArray, StateLength + 1);
+  FLexerState.IfDirectiveStateArray[StateLength] := ABranchState;
+  SetLength(FLexerState.IfDirectiveSavedCountersArray, StateLength + 1);
+  // Every branch starts with the counters of the start of the level
+  FLexerState.Counters := FLexerState.IfDirectiveSavedCountersArray[LevelIndex].StartCounters;
+end;
+
+procedure TPasLexer.CloseIfDirectiveLevel;
+var
+  StateLength, LevelIndex: Integer;
+begin
+  // With IgnoreCompilerDirectiveChecks the exception is not raised: a directive that cannot be matched to an open
+  // level is skipped, other errors do not stop the bookkeeping
+  StateLength := Length(FLexerState.IfDirectiveStateArray);
+  if (StateLength = 0) or (StateLength <> Length(FLexerState.IfDirectiveSavedCountersArray)) then
+  begin
+    RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH);
+    Exit;
+  end;
+  LevelIndex := FindIfDirectiveLevelStart;
+  if LevelIndex < 0 then
+  begin
+    RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_NOTFOUND_ON_RESTORE);
+    Exit;
+  end;
+
+  // A level without {$ELSEIF} and {$ELSE} has a single branch, there is nothing to compare it to
+  if (LevelIndex < StateLength - 1)
+      and not CompareMem(@FLexerState.Counters, @FLexerState.IfDirectiveSavedCountersArray[LevelIndex].EndCounters,
+      SizeOf(TPasLexerStateCounters))
+  then
+    RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_COUNTERS_MISMATCH_ELSE);
+  // Inside a level the directive counter is the one saved at its start, unless the state was changed from outside
+  if FLexerState.Counters.IfDirectiveCount <> FLexerState.IfDirectiveSavedCountersArray[LevelIndex].StartCounters.IfDirectiveCount then
+    RaiseCompilerDirectiveException(EMESSAGE_DIRECTIVE_STATE_COUNTER_MISMATCH);
+
+  SetLength(FLexerState.IfDirectiveStateArray, LevelIndex);
+  SetLength(FLexerState.IfDirectiveSavedCountersArray, LevelIndex);
+  Dec(FLexerState.Counters.IfDirectiveCount);
 end;
 
 procedure TPasLexer.PropertyPostHandler(var AToken: TTokenKind);
@@ -855,11 +912,21 @@ end;
 
 procedure TPasLexer.EndPostHandler(var AToken: TTokenKind);
 begin
+  // 'end' closes an asm block, a BASM label like @@end does not
+  if FLexerState.LastSignificantToken <> tkAddressSymbol then
+    FLexerState.IsAsmBlock := False;
   if FStartPtr[FLexerState.CurrentIndex] = '.' then
   begin
     Inc(FLexerState.CurrentIndex);
     AToken := tkUnitEnd
   end;
+end;
+
+procedure TPasLexer.AsmPostHandler(var AToken: TTokenKind);
+begin
+  // '&asm' is an identifier, not the start of an asm block
+  if (FLexerState.CurrentTokenPos = 0) or (FStartPtr[FLexerState.CurrentTokenPos - 1] <> '&') then
+    FLexerState.IsAsmBlock := True;
 end;
 
 procedure TPasLexer.BlankPostHandler(var AToken: TTokenKind);
@@ -932,6 +999,8 @@ begin
         FRunHandlers[Ch] := AsciiCharHandler;
       '$':
         FRunHandlers[Ch] := HexNumberHandler;
+      '%':
+        FRunHandlers[Ch] := BinaryNumberHandler;
       '''':
         FRunHandlers[Ch] := StringHandler;
       '0'..'9':
@@ -942,9 +1011,10 @@ begin
         FRunHandlers[Ch] := CurlyOpenHandler;
       '}':
         FRunHandlers[Ch] := UnknownHandler;  // lexer should handle all comments in Next method
-      '!', '"', '%', '&', '('..'/', ':'..'@', '['..'^', '`', '~':
+      '!', '"', '&', '('..'/', ':'..'@', '['..'^', '`', '~':
       begin
         case Ch of
+          '"': FRunHandlers[Ch] := DoubleQuoteHandler;
           '(': FRunHandlers[Ch] := RoundOpenHandler;
           ')': FRunHandlers[Ch] := RoundCloseHandler;
           '*': FRunHandlers[Ch] := StarHandler;
@@ -983,6 +1053,8 @@ begin
         FPostIdentifierHandlers[TokenKind] := PropertyDirectivePostHandler;
       tkEnd:
         FPostIdentifierHandlers[TokenKind] := EndPostHandler;
+      tkAsm:
+        FPostIdentifierHandlers[TokenKind] := AsmPostHandler;
     else
       FPostIdentifierHandlers[TokenKind] := BlankPostHandler;
     end;
@@ -1099,8 +1171,18 @@ begin
   end;
   if FLexerState.WasLineChange then
   begin
-    FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
-    Inc(FLexerState.CurrentLine);
+    if FLexerState.DirectiveLineBreakCount = 0 then
+    begin
+      FLexerState.CurrentLineStartPos := FLexerState.CurrentIndex;
+      Inc(FLexerState.CurrentLine);
+    end
+    else
+    begin
+      // The previous token is a compiler directive spanning several lines
+      FLexerState.CurrentLineStartPos := FLexerState.DirectiveLineStartPos;
+      Inc(FLexerState.CurrentLine, FLexerState.DirectiveLineBreakCount);
+      FLexerState.DirectiveLineBreakCount := 0;
+    end;
     FLexerState.WasLineChange := False;
   end;
 

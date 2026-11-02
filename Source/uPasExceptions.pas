@@ -1,5 +1,5 @@
 ﻿(*******************************************************************************
-*  Copyright © 2025 Pervov Evgeny                                              *
+*  Copyright © 2025 - 2026 Pervov Evgeny                                       *
 *                                                                              *
 *  Licensed under the Apache License, Version 2.0 (the "License");             *
 *  you may not use this file except in compliance with the License.            *
@@ -16,8 +16,8 @@
 *  Author: Pervov Evgeny                                                       *
 *  Created: 10.05.2025                                                         *
 *  Description: Exceptions for TPasLexer and TPasParser classes                *
-*  Version: 0.2                                                                *
-*  Last modified: 01.11.2026                                                   *
+*  Version: 0.3                                                                *
+*  Last modified: 02.11.2026                                                   *
 *  Contributor(s):                                                             *
 *    Pervov Evgeny <operationm@list.ru>                                        *
 *******************************************************************************)
@@ -81,6 +81,20 @@ resourcestring
 
   EMESSAGE_GRAMMAR_UNEXPECTED_ENDOFBLOCK = 'Unexpected end of block (%s).';
   EMESSAGE_GRAMMAR_UNEXPECTED_TOKEN = 'Unexpected token, expected %s, got %s.';
+  EMESSAGE_GRAMMAR_UNEXPECTED_ENDOFFILE = 'Unexpected end of file, expected %s.';
+  // Description of the actual token in EMESSAGE_GRAMMAR_UNEXPECTED_TOKEN: token kind and text
+  EMESSAGE_GRAMMAR_TOKEN_DESCRIPTION = '%s "%s"';
+
+  // Descriptions of the expected grammar elements for EMESSAGE_GRAMMAR_UNEXPECTED_TOKEN
+  EMESSAGE_EXPECTED_MODULE = 'unit, program, library or package';
+  EMESSAGE_EXPECTED_DECLARATION = 'declaration';
+  EMESSAGE_EXPECTED_IDENTIFIER = 'identifier';
+  EMESSAGE_EXPECTED_TYPE = 'type';
+  EMESSAGE_EXPECTED_EXPRESSION = 'expression';
+  EMESSAGE_EXPECTED_ROUTINE = 'procedure, function, constructor, destructor or operator';
+  EMESSAGE_EXPECTED_VISIBILITY = 'visibility specifier';
+  EMESSAGE_EXPECTED_LABEL = 'label';
+  EMESSAGE_EXPECTED_EXCEPT_OR_FINALLY = 'except or finally';
 
 implementation
 

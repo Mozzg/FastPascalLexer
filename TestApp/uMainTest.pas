@@ -636,27 +636,34 @@ var
   //i: Integer;
   CurState: TPasLexerMinimalState;
   Elapsed: Int64;
-  //CurError: TParseErrorItem;
+  CurError: TParseErrorItem;
   //FileStream: TFileStream;
   Root: TBaseLexemeNode;
+  IsParsed: Boolean;
 begin
   Parser := TPasParser.Create;
   try
     HRTimer := THighResolutionStopwatch.Create;
     try
-      FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\EmptyUnit.pas';
+      //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\EmptyUnit.pas';
       //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\BeginEndCountTestUnit2.pas';
       //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\VirtualTrees.pas';
-      //FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\TestPasHi.pas';
+      FileName := ExtractFilePath(ParamStr(0)) + '..\UnitTests\TestData\TestPasHi.pas';
 
-      //DataString := TPasParser.GetFileDataString(FileName);
+      DataString := TPasParser.GetFileDataString(FileName);
 
       HRTimer.Restart;
-      if not Parser.ParseString(DataString) then
-        raise Exception.Create('Parse error');
+      IsParsed := Parser.ParseString(DataString);
       Elapsed := HRTimer.ElapsedMicroseconds;
 
       Log('TokenCount=' + IntToStr(Parser.ParsedStateCount) + ', ElapsedMiscoSec=' + IntToStr(Elapsed));
+      if not IsParsed then
+      begin
+        for CurError in Parser.ErrorEnum do
+          Log('Parse error (Line: ' + IntToStr(CurError.LineNumber) + ', Column: ' + IntToStr(CurError.LinePosition)
+              + '): ' + CurError.Message);
+        Exit;
+      end;
 
       for CurState in Parser.ParsedStateEnum do
         Log(TOKEN_NAMES[CurState.CurrentToken]
