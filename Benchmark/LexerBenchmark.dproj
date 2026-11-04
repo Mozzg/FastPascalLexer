@@ -107,8 +107,8 @@
         <DCCReference Include="..\Source\uPasParserTypes.pas"/>
         <DCCReference Include="..\Source\uPasParserGrammar.pas"/>
         <DCCReference Include="..\Source\uPasParserSettings.pas"/>
-        <DCCReference Include="uLexerBenchmarkConsts.pas"/>
-        <DCCReference Include="uLexerBenchmark.pas"/>
+        <DCCReference Include="..\Source\uLexerBenchmarkConsts.pas"/>
+        <DCCReference Include="..\Source\uLexerBenchmark.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

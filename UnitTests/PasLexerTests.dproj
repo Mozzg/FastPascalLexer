@@ -114,9 +114,9 @@
         <DCCReference Include="..\Source\uPasLexer.pas"/>
         <DCCReference Include="..\Source\uPasLexerTypes.pas"/>
         <DCCReference Include="..\Source\uPasParser.pas"/>
-        <DCCReference Include="TestuPasLexer.pas"/>
-        <DCCReference Include="TestuPasLexerAdditional.pas"/>
-        <DCCReference Include="TestuPasParser.pas"/>
+        <DCCReference Include="..\Source\TestuPasLexer.pas"/>
+        <DCCReference Include="..\Source\TestuPasLexerAdditional.pas"/>
+        <DCCReference Include="..\Source\TestuPasParser.pas"/>
         <DCCReference Include="..\Source\uPasExceptions.pas"/>
         <DCCReference Include="..\Source\uPasParserTypes.pas"/>
         <DCCReference Include="..\Source\uPasParserGrammar.pas"/>

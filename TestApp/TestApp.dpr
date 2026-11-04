@@ -3,7 +3,7 @@
 uses
   FastMM5 in '..\Source\ThirdParty\FastMM5\FastMM5.pas',
   Vcl.Forms,
-  uMainTest in 'uMainTest.pas' {fmMainTest},
+  uMainTest in '..\Source\Forms\uMainTest.pas' {fmMainTest},
   uPasLexer in '..\Source\uPasLexer.pas',
   uPasLexerTypes in '..\Source\uPasLexerTypes.pas',
   uPasParser in '..\Source\uPasParser.pas',

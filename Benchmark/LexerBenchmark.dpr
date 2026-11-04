@@ -14,8 +14,8 @@ uses
   uPasParserTypes in '..\Source\uPasParserTypes.pas',
   uPasParserGrammar in '..\Source\uPasParserGrammar.pas',
   uPasParserSettings in '..\Source\uPasParserSettings.pas',
-  uLexerBenchmarkConsts in 'uLexerBenchmarkConsts.pas',
-  uLexerBenchmark in 'uLexerBenchmark.pas';
+  uLexerBenchmarkConsts in '..\Source\uLexerBenchmarkConsts.pas',
+  uLexerBenchmark in '..\Source\uLexerBenchmark.pas';
 
 {$R *.res}
 

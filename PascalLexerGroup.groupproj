@@ -12,6 +12,9 @@
         <Projects Include="Benchmark\LexerBenchmark.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="IDEPlugin\CodeStyleExpert.dproj" Condition="'$(Platform)'!='Win64'">
+            <Dependencies/>
+        </Projects>
     </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Default.Personality.12</Borland.Personality>
@@ -47,14 +50,23 @@
     <Target Name="LexerBenchmark:Make">
         <MSBuild Projects="Benchmark\LexerBenchmark.dproj" Targets="Make"/>
     </Target>
+    <Target Name="CodeStyleExpert">
+        <MSBuild Projects="IDEPlugin\CodeStyleExpert.dproj"/>
+    </Target>
+    <Target Name="CodeStyleExpert:Clean">
+        <MSBuild Projects="IDEPlugin\CodeStyleExpert.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="CodeStyleExpert:Make">
+        <MSBuild Projects="IDEPlugin\CodeStyleExpert.dproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="TestApp;PasLexerTests;LexerBenchmark"/>
+        <CallTarget Targets="TestApp;PasLexerTests;LexerBenchmark;CodeStyleExpert"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="TestApp:Clean;PasLexerTests:Clean;LexerBenchmark:Clean"/>
+        <CallTarget Targets="TestApp:Clean;PasLexerTests:Clean;LexerBenchmark:Clean;CodeStyleExpert:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="TestApp:Make;PasLexerTests:Make;LexerBenchmark:Make"/>
+        <CallTarget Targets="TestApp:Make;PasLexerTests:Make;LexerBenchmark:Make;CodeStyleExpert:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

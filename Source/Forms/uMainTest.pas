@@ -4,7 +4,7 @@ interface
 
 uses
   Vcl.Forms, System.Classes, Vcl.Controls, Vcl.StdCtrls, System.SysUtils, System.TypInfo,
-  System.StrUtils, System.IOUtils, System.Types, Winapi.Windows,
+  System.StrUtils, System.IOUtils, System.Types, Winapi.Windows, Vcl.Dialogs,
   uPasLexer, uPasLexerTypes, uPasParser, uPasLexerPerformance, uPasExceptions,
   uPasParserTypes, uPasParserGrammar;
 
@@ -29,6 +29,7 @@ type
     Button9: TButton;
     Button10: TButton;
     Button11: TButton;
+    Button12: TButton;
     procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
@@ -41,6 +42,7 @@ type
     procedure Button9Click(Sender: TObject);
     procedure Button10Click(Sender: TObject);
     procedure Button11Click(Sender: TObject);
+    procedure Button12Click(Sender: TObject);
   private type
     TMyClass122 = class( tobject)
       FField: Integer;
@@ -78,6 +80,10 @@ const
     'C:\AirusTT\Source\Scripts_MSSQL\TdaLu\fordebug\log_actual.pas',
     'C:\AirusTT\Source\Scripts_MSSQL\TdaLu\fordebug\log_full.pas'
   );
+
+type
+  // Kind of a source line for the blank line checks
+  TSourceLineKind = (slkBlank, slkComment, slkCode);
 
 function DetectEncoding(const AFileName: String): TEncoding;
 const
@@ -141,6 +147,148 @@ begin
   for i := Low(IGNORE_PARSE_FILES) to High(IGNORE_PARSE_FILES) do
     if SameText(IGNORE_PARSE_FILES[i], AFilePath) then
       Exit(True);
+end;
+
+// Kind of the source line ALineNumber (1-based) of the parsed text. A line inside a multi-line comment is a comment
+// line, also when it is empty; a line with a compiler directive is a code line.
+function GetSourceLineKind(AParser: TPasParser; ALineNumber: Integer): TSourceLineKind;
+const
+  COMMENT_LINE_TOKENS = [tkCurlyComment, tkSingleLineComment, tkStarParenComment, tkCRLFComment];
+var
+  Line: TPasLineInfo;
+  Token: TPasLexerMinimalState;
+  i: Integer;
+begin
+  Line := AParser.LineItem[ALineNumber];
+  // Only a compiler directive spanning several lines covers the start of a line: the lexer splits comments at line
+  // breaks
+  if (Line.FirstTokenIndex < 0) or (Integer(AParser.SourceTokenItem[Line.FirstTokenIndex].CurrentIndex) <> Line.StartPos) then
+    Exit(slkCode);
+
+  Result := slkBlank;
+  i := Line.FirstTokenIndex;
+  while i < AParser.SourceTokenCount do
+  begin
+    Token := AParser.SourceTokenItem[i];
+    if Integer(Token.CurrentLine) <> ALineNumber then
+      Break;
+    if Token.CurrentToken in COMMENT_LINE_TOKENS then
+      Result := slkComment
+    else if not (Token.CurrentToken in [tkSpace, tkCRLF]) then
+      Exit(slkCode);
+    Inc(i);
+  end;
+end;
+
+// Count of the blank lines right above the line ALineNumber. The comment lines right above it describe the
+// declaration that starts on it, the blank lines are counted above them.
+function CountBlankLinesBefore(AParser: TPasParser; ALineNumber: Integer): Integer;
+var
+  LineNumber: Integer;
+begin
+  LineNumber := ALineNumber - 1;
+  while (LineNumber >= 1) and (GetSourceLineKind(AParser, LineNumber) = slkComment) do
+    Dec(LineNumber);
+
+  Result := 0;
+  while (LineNumber >= 1) and (GetSourceLineKind(AParser, LineNumber) = slkBlank) do
+  begin
+    Inc(Result);
+    Dec(LineNumber);
+  end;
+end;
+
+// Count of the blank lines right below the line ALineNumber
+function CountBlankLinesAfter(AParser: TPasParser; ALineNumber: Integer): Integer;
+var
+  LineNumber: Integer;
+begin
+  Result := 0;
+  LineNumber := ALineNumber + 1;
+  while (LineNumber <= AParser.LineCount) and (GetSourceLineKind(AParser, LineNumber) = slkBlank) do
+  begin
+    Inc(Result);
+    Inc(LineNumber);
+  end;
+end;
+
+// True when only blank lines and the comment lines above ANextRoutine separate ARoutine from ANextRoutine: the blank
+// lines after ARoutine are the blank lines before ANextRoutine
+function AreRoutinesAdjacent(AParser: TPasParser; ARoutine, ANextRoutine: TRoutineLexemeNode): Boolean;
+var
+  LineNumber, NextStartLine: Integer;
+begin
+  NextStartLine := Integer(ANextRoutine.FirstState.CurrentLine);
+  LineNumber := Integer(ARoutine.LastState.CurrentLine) + 1;
+  while (LineNumber < NextStartLine) and (GetSourceLineKind(AParser, LineNumber) = slkBlank) do
+    Inc(LineNumber);
+  while (LineNumber < NextStartLine) and (GetSourceLineKind(AParser, LineNumber) = slkComment) do
+    Inc(LineNumber);
+  Result := LineNumber = NextStartLine;
+end;
+
+// Adds to AErrors the errors of the blank lines around ARoutine: exactly one blank line must separate it from the code
+// before and after it. An error before the routine refers to the line of its start, an error after it to the line of
+// its last end. ANextRoutine is the next checked routine, nil for the last one: between two adjacent routines the
+// error is reported once, before the second one.
+procedure CheckRoutineBlankLines(AParser: TPasParser; ARoutine, ANextRoutine: TRoutineLexemeNode; AErrors: TStrings);
+const
+  REQUIRED_BLANK_LINES = 1;
+  ERROR_MISSING_BEFORE = '  Line %d: missing blank line before %s';
+  ERROR_TOO_MANY_BEFORE = '  Line %d: too many blank lines (%d) before %s';
+  ERROR_MISSING_AFTER = '  Line %d: missing blank line after %s';
+  ERROR_TOO_MANY_AFTER = '  Line %d: too many blank lines (%d) after %s';
+var
+  StartLine, EndLine, BlankCount: Integer;
+begin
+  StartLine := Integer(ARoutine.FirstState.CurrentLine);
+  BlankCount := CountBlankLinesBefore(AParser, StartLine);
+  if BlankCount < REQUIRED_BLANK_LINES then
+    AErrors.Add(Format(ERROR_MISSING_BEFORE, [StartLine, ARoutine.Heading.Name]))
+  else if BlankCount > REQUIRED_BLANK_LINES then
+    AErrors.Add(Format(ERROR_TOO_MANY_BEFORE, [StartLine, BlankCount, ARoutine.Heading.Name]));
+
+  if Assigned(ANextRoutine) and AreRoutinesAdjacent(AParser, ARoutine, ANextRoutine) then
+    Exit;
+
+  // The blank lines are counted after the semicolon that follows the end
+  EndLine := Integer(ARoutine.Body.LastState.CurrentLine);
+  BlankCount := CountBlankLinesAfter(AParser, Integer(ARoutine.LastState.CurrentLine));
+  if BlankCount < REQUIRED_BLANK_LINES then
+    AErrors.Add(Format(ERROR_MISSING_AFTER, [EndLine, ARoutine.Heading.Name]))
+  else if BlankCount > REQUIRED_BLANK_LINES then
+    AErrors.Add(Format(ERROR_TOO_MANY_AFTER, [EndLine, BlankCount, ARoutine.Heading.Name]));
+end;
+
+// Adds to AErrors the blank line errors of the routines of the implementation section of the parsed unit. Nested
+// routines and the routines without a body (forward, external) are not checked.
+procedure CheckImplementationBlankLines(AParser: TPasParser; AErrors: TStrings);
+var
+  Section, Node: TBaseLexemeNode;
+  Routine, PrevRoutine: TRoutineLexemeNode;
+  i: Integer;
+begin
+  Section := AParser.RootLexeme;
+  while Assigned(Section) and (Section.NodeType <> ltImplementation) do
+    Section := Section.NextTraversal;
+  if not Assigned(Section) then
+    Exit;
+
+  // A routine is checked when the next one is found: the blank lines after it can be the blank lines before the next one
+  PrevRoutine := nil;
+  for i := 0 to Section.ChildCount - 1 do
+  begin
+    Node := Section.Children[i];
+    if (Node.NodeType <> ltRoutine) or (not Assigned(TRoutineLexemeNode(Node).Body)) then
+      Continue;
+
+    Routine := TRoutineLexemeNode(Node);
+    if Assigned(PrevRoutine) then
+      CheckRoutineBlankLines(AParser, PrevRoutine, Routine, AErrors);
+    PrevRoutine := Routine;
+  end;
+  if Assigned(PrevRoutine) then
+    CheckRoutineBlankLines(AParser, PrevRoutine, nil, AErrors);
 end;
 
 procedure TfmMainTest.Button10Click(Sender: TObject);
@@ -234,6 +382,78 @@ begin
       Log('EPasLexerException: ' + E.Message);
   end;
 
+  Log('DONE');
+end;
+
+procedure TfmMainTest.Button12Click(Sender: TObject);
+const
+  DIALOG_TITLE = 'Select a folder with Pascal sources';
+  SEARCH_PATTERN = '*.pas';
+  SUMMARY_FORMAT = 'Files: %d, with blank line errors: %d, not parsed (skipped): %d';
+var
+  Dialog: TFileOpenDialog;
+  Parser: TPasParser;
+  Errors: TStringList;
+  Files: TStringDynArray;
+  Directory: string;
+  i, j, ErrorFileCount, SkippedCount: Integer;
+  IsParsed: Boolean;
+begin
+  Dialog := TFileOpenDialog.Create(nil);
+  try
+    Dialog.Title := DIALOG_TITLE;
+    Dialog.Options := [fdoPickFolders, fdoPathMustExist, fdoForceFileSystem];
+    if not Dialog.Execute then
+      Exit;
+    Directory := Dialog.FileName;
+  finally
+    Dialog.Free;
+  end;
+
+  Files := TDirectory.GetFiles(Directory, SEARCH_PATTERN, TSearchOption.soAllDirectories);
+  ErrorFileCount := 0;
+  SkippedCount := 0;
+  Parser := TPasParser.Create;
+  try
+    Errors := TStringList.Create;
+    try
+      Memo1.Lines.BeginUpdate;
+      try
+        for i := 0 to High(Files) do
+        begin
+          // A file with a syntax error, or one that can not be read, is skipped
+          try
+            IsParsed := Parser.ParseFile(Files[i]);
+          except
+            IsParsed := False;
+          end;
+          if not IsParsed then
+          begin
+            Inc(SkippedCount);
+            Continue;
+          end;
+
+          Errors.Clear;
+          CheckImplementationBlankLines(Parser, Errors);
+          if Errors.Count = 0 then
+            Continue;
+
+          Inc(ErrorFileCount);
+          Log(Files[i]);
+          for j := 0 to Errors.Count - 1 do
+            Log(Errors[j]);
+        end;
+      finally
+        Memo1.Lines.EndUpdate;
+      end;
+    finally
+      Errors.Free;
+    end;
+  finally
+    Parser.Free;
+  end;
+
+  Log(Format(SUMMARY_FORMAT, [Length(Files), ErrorFileCount, SkippedCount]));
   Log('DONE');
 end;
 

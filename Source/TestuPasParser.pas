@@ -304,11 +304,13 @@ end;
 
 procedure TestTPasParser.TestRepositorySources;
 const
-  SOURCE_FOLDERS: array[0..3] of string = (
+  SOURCE_FOLDERS: array[0..5] of string = (
     'Source',
+    'Source\Forms',
     'UnitTests',
     'TestApp',
-    'Benchmark'
+    'Benchmark',
+    'IDEPlugin'
   );
 var
   Folder, FileName, Extension: string;
@@ -325,7 +327,7 @@ begin
         Inc(FileCount);
       end;
     end;
-  CheckTrue(FileCount >= 15, 'Count of the parsed source files: ' + IntToStr(FileCount));
+  CheckTrue(FileCount >= 30, 'Count of the parsed source files: ' + IntToStr(FileCount));
 end;
 
 procedure TestTPasParser.TestProgramLibraryPackage;

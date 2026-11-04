@@ -9,7 +9,8 @@ tokenization speed. Every change must respect that goal.
 
 Repository layout:
 
-- `Source/` — production units:
+- `Source/` — all units of all projects (the project folders hold no `.pas`
+  files, see "Source folder" in section 2):
   - `uPasLexer.pas`, `uPasLexerTypes.pas` — the lexer `TPasLexer`, token kinds
     and the keyword table.
   - `uPasParser.pas`, `uPasParserGrammar.pas`, `uPasParserTypes.pas` — the
@@ -18,16 +19,26 @@ Repository layout:
   - `uPasParserSettings.pas` — a stub for future parser settings; not used yet.
   - `uPasLexerPerformance.pas` — measurement tools (`THighResolutionStopwatch`,
     `TMeasureThread`) used by TestApp; not part of the lexer.
+  - `TestuPasLexer.pas`, `TestuPasLexerAdditional.pas`, `TestuPasParser.pas` —
+    the DUnit tests (section 4).
+  - `uLexerBenchmark.pas`, `uLexerBenchmarkConsts.pas` — the console benchmark.
+  - `uCodeStyle*.pas` — the code style feature of the IDE plugin;
+    `uWizard*.pas`, `uBaseFeature.pas`, `uFeatureCollection.pas` — the copy of
+    the DICE framework it runs on (see `IDEPlugin/README.md`).
+  - `Forms/` — the forms and frames (`.pas` with `.dfm`): `uMainTest` of
+    TestApp, `ufmWizardSettings` and `ufrBaseSettings` of the IDE plugin.
   - `ThirdParty/FastMM5/` — the FastMM5 memory manager, a git submodule
     (`pleriche/FastMM5`, pinned commit) used by TestApp.
 - `TestApp/` — VCL GUI test/benchmark application (`TestApp.dpr`).
-- `UnitTests/` — DUnit test project (`PasLexerTests.dpr`), test units and
-  `TestData/`.
+- `UnitTests/` — DUnit test project (`PasLexerTests.dpr`) and `TestData/`.
 - `Benchmark/` — console benchmark of the lexer speed (`LexerBenchmark.dpr`,
   see section 5).
+- `IDEPlugin/` — test IDE plugin (DLL expert) `CodeStyleExpert.dpr` that checks
+  the code style of the compiled modules with the parser; its feature is later
+  moved to the DICE plugin (see `IDEPlugin/README.md`).
 - `build.cmd`, `test.cmd` — build and test scripts (see section 5).
 - `PascalLexerGroup.groupproj` — the group project (TestApp, PasLexerTests,
-  LexerBenchmark), the repository entry point.
+  LexerBenchmark, CodeStyleExpert), the repository entry point.
 
 Fresh clone setup:
 
@@ -205,6 +216,13 @@ section 1, they take precedence.
 
 ### Additional rules
 
+- **Source folder.** All units of all projects (`.pas`, and `.dfm` of forms)
+  live in `Source/`, the forms and frames in `Source/Forms/`; a project folder
+  (`TestApp/`, `UnitTests/`, `Benchmark/`, `IDEPlugin/`) holds only the
+  project files (`.dpr`, `.dproj`, `.res`, scripts, docs), never a `.pas` file.
+  A new unit goes to `Source/` and is referenced as `..\Source\<unit>.pas`
+  (`..\Source\Forms\<unit>.pas` for a form) in the `.dpr` and the `.dproj`.
+  Exceptions: `Source/ThirdParty/` and the test input in `UnitTests/TestData/`.
 - **Line length.** In new and modified code a line must not exceed 140
   characters (a hard limit). Do not rewrap existing long lines the task does
   not touch.
@@ -434,15 +452,16 @@ own, also when the layout may explain the difference.
 ## 4. Tests
 
 - Every change of lexer behavior and every bug fix comes with a test.
-- Tests on code fragments go into `UnitTests/TestuPasLexerAdditional.pas` and
+- Tests on code fragments go into `Source/TestuPasLexerAdditional.pas` and
   use its helpers (`GetTokens`, `GetTokensNoJunk`, `CheckTokensEqual`,
   `CheckTokenEquals`). Tests that read files from `UnitTests/TestData/` go
-  into `UnitTests/TestuPasLexer.pas`.
-- Parser tests (fragments and files) go into `UnitTests/TestuPasParser.pas`
+  into `Source/TestuPasLexer.pas`.
+- Parser tests (fragments and files) go into `Source/TestuPasParser.pas`
   and use its helpers (`MakeUnit`, `MakeStatements`, `CheckParsed`,
   `CheckParseError`, `FindNode`, `CountNodes`, `CheckBinary`). Every change of
   the grammar comes with a test; `TestRepositorySources` parses the sources
-  of this repository, so new code here must stay parsable.
+  of this repository (`Source`, `Source\Forms` and the project folders, not
+  recursively), so new code here must stay parsable.
 - Test methods are named `Test<WhatIsChecked>` (e.g.
   `TestNumbersExponentAndHex`) and declared in the `published` section.
 - Build test data paths relative to the executable, as the existing tests do:
@@ -587,9 +606,12 @@ cmd /c "call ""C:\Program Files (x86)\Embarcadero\Studio\22.0\bin\rsvars.bat"" >
 ```
 
 The group project `PascalLexerGroup.groupproj` builds `TestApp`,
-`PasLexerTests` and `LexerBenchmark`. Available group targets: `Build`,
-`Clean`, `Make`, plus per-project `<Project>`, `<Project>:Clean` and
-`<Project>:Make` for each of the three projects.
+`PasLexerTests`, `LexerBenchmark` and `CodeStyleExpert`. Available group
+targets: `Build`, `Clean`, `Make`, plus per-project `<Project>`,
+`<Project>:Clean` and `<Project>:Make` for each of the four projects.
+`CodeStyleExpert` is Win32 only: its `Projects` item has the condition
+`'$(Platform)'!='Win64'`, so a Win64 build of the group skips it. The IDE may
+drop the condition when it saves the group; restore it then.
 
 ### Projects and configurations
 
@@ -604,6 +626,11 @@ The group project `PascalLexerGroup.groupproj` builds `TestApp`,
   project: they are test input and may not compile in every configuration.
 - **Console benchmark:** `Benchmark\LexerBenchmark.dproj` — configurations
   `Debug` and `Release` (default), platforms `Win32` and `Win64`.
+- **IDE plugin:** `IDEPlugin\CodeStyleExpert.dproj` (DLL, runtime packages
+  `rtl;vcl;designide`) — configurations `Debug` (default) and `Release`,
+  platform `Win32` only (the IDE is 32-bit). Writes `Exe\CodeStyleExpert.dll`,
+  DCUs go to `DCU\IDEPlugin\<Platform><Config>\`. The pre-build event
+  (`movedll.cmd`) renames a DLL that the IDE holds loaded to `.dll~`.
 - All configurations and platforms write the executables to the same `Exe\`
   folder, so the last build wins: build the variant you intend to run right
   before running it. DCUs go to `DCU\<Platform><Config>\`.
