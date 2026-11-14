@@ -7,7 +7,9 @@ interface
 uses
   System.SysUtils, System.Classes, Winapi.Windows, Vcl.Forms, Vcl.Controls, Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.ComCtrls,
   Vcl.Dialogs, Vcl.Graphics, Vcl.Themes,
-  uCodeStyleConsts, uCodeStyleProfileCatalog, uCodeStyleProfile;
+  uCodeStyleConsts, uCodeStyleProfileCatalog, uCodeStyleProfile,
+  // After Vcl.ComCtrls: its interposer TListView gives lvRules the fixed style hook
+  uCodeStyleRuleListView;
 
 type
   // Which rules the list shows
@@ -66,7 +68,10 @@ type
     FProfile: TCodeStyleProfile;
     // Rule shown in the details, nil when no rule is selected
     FCurrentRule: TCodeStyleProfileRule;
-    // Top of the next option control in sbOptions
+    // Panel in sbOptions with the controls of the options of FCurrentRule; nil when no rule is shown. Every rule gets
+    // a new panel, built while hidden and shown at once, so the controls do not flicker while they are created
+    FOptionsPanel: TPanel;
+    // Top of the next option control in FOptionsPanel
     FNextOptionTop: Integer;
     // True while FillRuleList changes the items, the selection events are ignored then
     FFillingList: Boolean;
@@ -80,7 +85,8 @@ type
     // Fills the list with the rules that pass the filter, every category under a row of its own (an item without
     // Data); keeps the selected rule when it is still shown
     procedure FillRuleList;
-    procedure ClearOptionControls;
+    // Creates the hidden panel in sbOptions for the controls of the options of a rule
+    function CreateOptionsPanel: TPanel;
     // Places a control of the option below the previous ones
     procedure PlaceOptionControl(AControl: TControl; AWidth: Integer);
     procedure AddOptionLabel(AOption: TCodeStyleProfileOption);
@@ -359,24 +365,31 @@ begin
     ShowRule(nil);
 end;
 
-procedure TfmCodeStyleProfile.ClearOptionControls;
+function TfmCodeStyleProfile.CreateOptionsPanel: TPanel;
 begin
-  while sbOptions.ControlCount > 0 do
-    sbOptions.Controls[0].Free;
-  sbOptions.VertScrollBar.Position := 0;
-  FNextOptionTop := OPTION_MARGIN;
+  // sbOptions owns the panel, the panel owns the controls of the options
+  Result := TPanel.Create(sbOptions);
+  Result.Visible := False;
+  Result.BevelOuter := bvNone;
+  Result.ShowCaption := False;
+  Result.ParentColor := True;
+  Result.ParentBackground := True;
+  Result.Parent := sbOptions;
+  // A hidden control is not aligned, so the width for the controls is set here; alTop keeps it when shown
+  Result.SetBounds(0, 0, sbOptions.ClientWidth, sbOptions.ClientHeight);
+  Result.Align := alTop;
 end;
 
 procedure TfmCodeStyleProfile.PlaceOptionControl(AControl: TControl; AWidth: Integer);
 begin
-  AControl.Parent := sbOptions;
+  AControl.Parent := FOptionsPanel;
   AControl.Left := OPTION_MARGIN;
   AControl.Top := FNextOptionTop;
   if AWidth > 0 then
     AControl.Width := AWidth
   else
   begin
-    AControl.Width := sbOptions.ClientWidth - 2 * OPTION_MARGIN;
+    AControl.Width := FOptionsPanel.ClientWidth - 2 * OPTION_MARGIN;
     AControl.Anchors := [akLeft, akTop, akRight];
   end;
   FNextOptionTop := FNextOptionTop + AControl.Height;
@@ -386,7 +399,7 @@ procedure TfmCodeStyleProfile.AddOptionLabel(AOption: TCodeStyleProfileOption);
 var
   OptionLabel: TLabel;
 begin
-  OptionLabel := TLabel.Create(sbOptions);
+  OptionLabel := TLabel.Create(FOptionsPanel);
   OptionLabel.Caption := Format(PROFILE_OPTION_CAPTION, [AOption.Info.Caption]);
   OptionLabel.Hint := AOption.Info.Hint;
   OptionLabel.ShowHint := True;
@@ -403,7 +416,7 @@ var
   Count: Integer;
 begin
   AddOptionLabel(AOption);
-  ModeComboBox := TComboBox.Create(sbOptions);
+  ModeComboBox := TComboBox.Create(FOptionsPanel);
   ModeComboBox.Style := csDropDownList;
   ModeComboBox.Tag := AOptionIndex;
   ModeComboBox.Hint := AOption.Info.Hint;
@@ -418,14 +431,14 @@ begin
   Count := AOption.QuantityCount;
   if Count < AOption.Info.MinValue then
     Count := AOption.Info.MinValue;
-  CountEdit := TEdit.Create(sbOptions);
-  CountEdit.Parent := sbOptions;
+  CountEdit := TEdit.Create(FOptionsPanel);
+  CountEdit.Parent := FOptionsPanel;
   CountEdit.SetBounds(ModeComboBox.Left + ModeComboBox.Width + OPTION_SPACING, ModeComboBox.Top, INTEGER_EDIT_WIDTH,
       CountEdit.Height);
   CountEdit.NumbersOnly := True;
   CountEdit.Tag := AOptionIndex;
-  CountUpDown := TUpDown.Create(sbOptions);
-  CountUpDown.Parent := sbOptions;
+  CountUpDown := TUpDown.Create(FOptionsPanel);
+  CountUpDown.Parent := FOptionsPanel;
   CountUpDown.Tag := AOptionIndex;
   CountUpDown.Min := AOption.Info.MinValue;
   CountUpDown.Max := AOption.Info.MaxValue;
@@ -452,7 +465,7 @@ begin
   case AOption.Info.Kind of
     cokBoolean:
     begin
-      OptionCheckBox := TCheckBox.Create(sbOptions);
+      OptionCheckBox := TCheckBox.Create(FOptionsPanel);
       OptionCheckBox.Caption := AOption.Info.Caption;
       OptionCheckBox.Checked := AOption.AsBoolean;
       OptionCheckBox.Tag := AOptionIndex;
@@ -465,14 +478,14 @@ begin
     cokInteger:
     begin
       AddOptionLabel(AOption);
-      OptionEdit := TEdit.Create(sbOptions);
+      OptionEdit := TEdit.Create(FOptionsPanel);
       OptionEdit.NumbersOnly := AOption.Info.MinValue >= 0;
       OptionEdit.Tag := AOptionIndex;
       OptionEdit.Hint := AOption.Info.Hint;
       OptionEdit.ShowHint := True;
       PlaceOptionControl(OptionEdit, INTEGER_EDIT_WIDTH);
-      OptionUpDown := TUpDown.Create(sbOptions);
-      OptionUpDown.Parent := sbOptions;
+      OptionUpDown := TUpDown.Create(FOptionsPanel);
+      OptionUpDown.Parent := FOptionsPanel;
       OptionUpDown.Tag := AOptionIndex;
       OptionUpDown.Min := AOption.Info.MinValue;
       OptionUpDown.Max := AOption.Info.MaxValue;
@@ -486,7 +499,7 @@ begin
     cokText:
     begin
       AddOptionLabel(AOption);
-      OptionEdit := TEdit.Create(sbOptions);
+      OptionEdit := TEdit.Create(FOptionsPanel);
       OptionEdit.Text := AOption.Value;
       OptionEdit.Tag := AOptionIndex;
       OptionEdit.Hint := AOption.Info.Hint;
@@ -497,7 +510,7 @@ begin
     cokTextList:
     begin
       AddOptionLabel(AOption);
-      OptionMemo := TMemo.Create(sbOptions);
+      OptionMemo := TMemo.Create(FOptionsPanel);
       OptionMemo.Height := TEXT_LIST_HEIGHT;
       OptionMemo.ScrollBars := ssVertical;
       OptionMemo.WordWrap := False;
@@ -512,7 +525,7 @@ begin
     cokChoice:
     begin
       AddOptionLabel(AOption);
-      OptionComboBox := TComboBox.Create(sbOptions);
+      OptionComboBox := TComboBox.Create(FOptionsPanel);
       OptionComboBox.Style := csDropDownList;
       OptionComboBox.Tag := AOptionIndex;
       OptionComboBox.Hint := AOption.Info.Hint;
@@ -533,39 +546,54 @@ function TfmCodeStyleProfile.FindOptionControl(AOptionIndex: Integer; AControlCl
 var
   i: Integer;
 begin
-  for i := 0 to sbOptions.ControlCount - 1 do
-    if (sbOptions.Controls[i].Tag = AOptionIndex) and (sbOptions.Controls[i] is AControlClass) then
-      Exit(sbOptions.Controls[i]);
+  for i := 0 to FOptionsPanel.ControlCount - 1 do
+    if (FOptionsPanel.Controls[i].Tag = AOptionIndex) and (FOptionsPanel.Controls[i] is AControlClass) then
+      Exit(FOptionsPanel.Controls[i]);
   Result := nil;
 end;
 
 procedure TfmCodeStyleProfile.ShowRule(ARule: TCodeStyleProfileRule);
 var
+  OldPanel: TPanel;
   i: Integer;
 begin
   FCurrentRule := ARule;
-  sbOptions.DisableAlign;
+  OldPanel := FOptionsPanel;
+  FOptionsPanel := nil;
+  // The captions change the heights of the labels: pnDetails is aligned once at the end
+  pnDetails.DisableAlign;
   try
-    ClearOptionControls;
-    if not Assigned(ARule) then
+    if Assigned(ARule) then
+    begin
+      // The controls are created on a hidden panel, the old panel stays visible meanwhile
+      FOptionsPanel := CreateOptionsPanel;
+      FNextOptionTop := OPTION_MARGIN;
+      for i := 0 to ARule.OptionCount - 1 do
+        AddOptionControl(i, ARule.Options[i]);
+      FOptionsPanel.Height := FNextOptionTop + OPTION_MARGIN;
+
+      lblRuleCaption.Caption := ARule.Info.Caption;
+      lblRuleSubtitle.Caption := GetRuleSubtitle(ARule);
+      lblRuleDescription.Caption := ARule.Info.Description;
+      pnLevel.Visible := not ARule.Info.WithoutLevel;
+      cbLevel.ItemIndex := Ord(ARule.Level);
+    end
+    else
     begin
       lblRuleCaption.Caption := '';
       lblRuleSubtitle.Caption := '';
       lblRuleDescription.Caption := '';
       pnLevel.Visible := False;
-      Exit;
     end;
-
-    lblRuleCaption.Caption := ARule.Info.Caption;
-    lblRuleSubtitle.Caption := GetRuleSubtitle(ARule);
-    lblRuleDescription.Caption := ARule.Info.Description;
-    pnLevel.Visible := not ARule.Info.WithoutLevel;
-    cbLevel.ItemIndex := Ord(ARule.Level);
-    for i := 0 to ARule.OptionCount - 1 do
-      AddOptionControl(i, ARule.Options[i]);
   finally
-    sbOptions.EnableAlign;
+    pnDetails.EnableAlign;
   end;
+
+  // The new controls appear at once, then the old ones are removed under them
+  sbOptions.VertScrollBar.Position := 0;
+  if Assigned(FOptionsPanel) then
+    FOptionsPanel.Visible := True;
+  OldPanel.Free;
 end;
 
 procedure TfmCodeStyleProfile.ShowCategory(AItem: TListItem);
@@ -573,22 +601,28 @@ var
   Rule: TCodeStyleProfileRule;
   RuleCount, EnabledCount, i: Integer;
 begin
-  ShowRule(nil);
+  // ShowRule clears the captions and this method sets them again: pnDetails is aligned once
+  pnDetails.DisableAlign;
+  try
+    ShowRule(nil);
 
-  // The rules of the category are the items up to the next category row
-  RuleCount := 0;
-  EnabledCount := 0;
-  i := AItem.Index + 1;
-  while (i < lvRules.Items.Count) and Assigned(lvRules.Items[i].Data) do
-  begin
-    Rule := TCodeStyleProfileRule(lvRules.Items[i].Data);
-    Inc(RuleCount);
-    if (not Rule.Info.WithoutLevel) and (Rule.Level <> cslOff) then
-      Inc(EnabledCount);
-    Inc(i);
+    // The rules of the category are the items up to the next category row
+    RuleCount := 0;
+    EnabledCount := 0;
+    i := AItem.Index + 1;
+    while (i < lvRules.Items.Count) and Assigned(lvRules.Items[i].Data) do
+    begin
+      Rule := TCodeStyleProfileRule(lvRules.Items[i].Data);
+      Inc(RuleCount);
+      if (not Rule.Info.WithoutLevel) and (Rule.Level <> cslOff) then
+        Inc(EnabledCount);
+      Inc(i);
+    end;
+    lblRuleCaption.Caption := AItem.Caption;
+    lblRuleSubtitle.Caption := Format(PROFILE_CATEGORY_SUMMARY, [RuleCount, EnabledCount]);
+  finally
+    pnDetails.EnableAlign;
   end;
-  lblRuleCaption.Caption := AItem.Caption;
-  lblRuleSubtitle.Caption := Format(PROFILE_CATEGORY_SUMMARY, [RuleCount, EnabledCount]);
 end;
 
 function TfmCodeStyleProfile.ConfirmAction(const AQuestion: string): Boolean;

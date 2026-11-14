@@ -15,7 +15,8 @@ uses
   ufmCodeStyleProfile in '..\Source\Forms\ufmCodeStyleProfile.pas' {fmCodeStyleProfile},
   uCodeStyleConsts in '..\Source\uCodeStyleConsts.pas',
   uCodeStyleProfile in '..\Source\uCodeStyleProfile.pas',
-  uCodeStyleProfileCatalog in '..\Source\uCodeStyleProfileCatalog.pas';
+  uCodeStyleProfileCatalog in '..\Source\uCodeStyleProfileCatalog.pas',
+  uCodeStyleRuleListView in '..\Source\uCodeStyleRuleListView.pas';
 
 {$R *.res}
 

@@ -45,6 +45,7 @@ Source\
     uCodeStyleConsts.pas           codes, texts, settings names
     uCodeStyleProfileCatalog.pas   catalog of the profile: categories, rules, options, defaults (data only)
     uCodeStyleProfile.pas          code style profile: levels and option values, XML settings and files
+    uCodeStyleRuleListView.pas     list view of the dialog: scroll bar drag under the IDE theme, double buffering
     Forms\ufmCodeStyleProfile.pas/.dfm  dialog of the profile
   the parser: uPasLexer, uPasLexerTypes, uPasExceptions, uPasParser, uPasParserTypes, uPasParserGrammar
 ```
@@ -56,7 +57,21 @@ uCodeStyleFeature -> uCodeStyleCompileNotifier -> uCodeStyleProjectChecker -> uC
                                                                            -> uCodeStyleChecker -> uCodeStyleRules
 uCodeStyleBasicRules -> uCodeStyleRules
 uCodeStyleFeature -> ufmCodeStyleProfile -> uCodeStyleProfile -> uCodeStyleProfileCatalog
+                                         -> uCodeStyleRuleListView
 ```
+
+`uCodeStyleRuleListView` works around a VCL bug: under a VCL style (the IDE theme) `TListViewStyleHook`
+scrolls a report view by a fractional number of rows when the scroll bar thumb is dragged, the list
+scrolls by whole rows only and the rest of a row is lost on every mouse move, so the thumb falls
+behind the mouse. The unit declares an interposer `TListView` (the dialog lists the unit after
+`Vcl.ComCtrls`, the form designer still sees the standard class) and registers a style hook for it
+that scrolls to the row under the thumb from the real position of the list. Other list views,
+also those of the IDE, keep the standard hook; the hook is unregistered when the plugin is unloaded.
+The same class also sets `LVS_EX_DOUBLEBUFFER` after every creation of its window (VCL does not set
+it, and `ResetExStyles` overwrites the extended styles), so without a VCL style the rows that a fast
+scroll shows do not flicker. The list then skips `WM_ERASEBKGND` (it paints its background itself;
+`TWinControl.WMEraseBkgnd` would fill the whole list white, and while the thumb is dragged the paint
+comes only when the mouse stops) and paints at once after every step of the thumb.
 
 `uCodeStyleChecker`, `uCodeStyleRules`, the rule units and the profile units do not use ToolsAPI, so
 they can be used by unit tests and console tools.
@@ -204,7 +219,7 @@ start of the IDE. The Debug configuration runs `bds.exe -pDelphi` as the host ap
 
 ## Moving the feature to DICE
 
-1. Copy `Source\uCodeStyle*.pas` (10 units) to `DICE\Source\` and
+1. Copy `Source\uCodeStyle*.pas` (11 units) to `DICE\Source\` and
    `Source\Forms\ufmCodeStyleProfile.pas/.dfm` to `DICE\Source\Forms\`.
 2. Make the parser units available to DICE: `uPasLexer`, `uPasLexerTypes`, `uPasExceptions`,
    `uPasParser`, `uPasParserTypes`, `uPasParserGrammar` from `Source\` of FastPascalLexer

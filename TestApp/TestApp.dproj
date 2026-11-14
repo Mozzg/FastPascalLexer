@@ -139,6 +139,7 @@
         <DCCReference Include="..\Source\uCodeStyleConsts.pas"/>
         <DCCReference Include="..\Source\uCodeStyleProfile.pas"/>
         <DCCReference Include="..\Source\uCodeStyleProfileCatalog.pas"/>
+        <DCCReference Include="..\Source\uCodeStyleRuleListView.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

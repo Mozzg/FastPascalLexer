@@ -110,6 +110,7 @@ $(PreBuildEvent)]]></PreBuildEvent>
         <DCCReference Include="..\Source\uCodeStyleIDEServices.pas"/>
         <DCCReference Include="..\Source\uCodeStyleProjectChecker.pas"/>
         <DCCReference Include="..\Source\uCodeStyleCompileNotifier.pas"/>
+        <DCCReference Include="..\Source\uCodeStyleRuleListView.pas"/>
         <DCCReference Include="..\Source\Forms\ufmCodeStyleProfile.pas">
             <Form>fmCodeStyleProfile</Form>
         </DCCReference>

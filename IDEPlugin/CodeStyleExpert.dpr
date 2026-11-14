@@ -32,6 +32,7 @@ uses
   uCodeStyleIDEServices in '..\Source\uCodeStyleIDEServices.pas',
   uCodeStyleProjectChecker in '..\Source\uCodeStyleProjectChecker.pas',
   uCodeStyleCompileNotifier in '..\Source\uCodeStyleCompileNotifier.pas',
+  uCodeStyleRuleListView in '..\Source\uCodeStyleRuleListView.pas',
   ufmCodeStyleProfile in '..\Source\Forms\ufmCodeStyleProfile.pas' {fmCodeStyleProfile},
   uCodeStyleFeature in '..\Source\uCodeStyleFeature.pas';
 
