@@ -25,11 +25,14 @@ uses
   uPasParserGrammar in '..\Source\uPasParserGrammar.pas',
   uCodeStyleConsts in '..\Source\uCodeStyleConsts.pas',
   uCodeStyleRules in '..\Source\uCodeStyleRules.pas',
+  uCodeStyleProfileCatalog in '..\Source\uCodeStyleProfileCatalog.pas',
+  uCodeStyleProfile in '..\Source\uCodeStyleProfile.pas',
   uCodeStyleBasicRules in '..\Source\uCodeStyleBasicRules.pas',
   uCodeStyleChecker in '..\Source\uCodeStyleChecker.pas',
   uCodeStyleIDEServices in '..\Source\uCodeStyleIDEServices.pas',
   uCodeStyleProjectChecker in '..\Source\uCodeStyleProjectChecker.pas',
   uCodeStyleCompileNotifier in '..\Source\uCodeStyleCompileNotifier.pas',
+  ufmCodeStyleProfile in '..\Source\Forms\ufmCodeStyleProfile.pas' {fmCodeStyleProfile},
   uCodeStyleFeature in '..\Source\uCodeStyleFeature.pas';
 
 exports

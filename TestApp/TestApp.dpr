@@ -11,7 +11,11 @@ uses
   uPasExceptions in '..\Source\uPasExceptions.pas',
   uPasParserTypes in '..\Source\uPasParserTypes.pas',
   uPasParserGrammar in '..\Source\uPasParserGrammar.pas',
-  uPasParserSettings in '..\Source\uPasParserSettings.pas';
+  uPasParserSettings in '..\Source\uPasParserSettings.pas',
+  ufmCodeStyleProfile in '..\Source\Forms\ufmCodeStyleProfile.pas' {fmCodeStyleProfile},
+  uCodeStyleConsts in '..\Source\uCodeStyleConsts.pas',
+  uCodeStyleProfile in '..\Source\uCodeStyleProfile.pas',
+  uCodeStyleProfileCatalog in '..\Source\uCodeStyleProfileCatalog.pas';
 
 {$R *.res}
 

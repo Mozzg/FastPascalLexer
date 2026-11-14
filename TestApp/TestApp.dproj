@@ -132,6 +132,13 @@
         <DCCReference Include="..\Source\uPasParserTypes.pas"/>
         <DCCReference Include="..\Source\uPasParserGrammar.pas"/>
         <DCCReference Include="..\Source\uPasParserSettings.pas"/>
+        <DCCReference Include="..\Source\Forms\ufmCodeStyleProfile.pas">
+            <Form>fmCodeStyleProfile</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="..\Source\uCodeStyleConsts.pas"/>
+        <DCCReference Include="..\Source\uCodeStyleProfile.pas"/>
+        <DCCReference Include="..\Source\uCodeStyleProfileCatalog.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -159,6 +166,12 @@
             </Delphi.Personality>
             <Deployment Version="4">
                 <DeployFile LocalName="..\Exe\TestApp.exe" Configuration="Debug" Class="ProjectOutput">
+                    <Platform Name="Win32">
+                        <RemoteName>TestApp.exe</RemoteName>
+                        <Overwrite>true</Overwrite>
+                    </Platform>
+                </DeployFile>
+                <DeployFile LocalName="..\Exe\TestApp.exe" Configuration="Release" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>TestApp.exe</RemoteName>
                         <Overwrite>true</Overwrite>

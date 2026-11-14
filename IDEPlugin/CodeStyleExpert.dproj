@@ -103,11 +103,16 @@ $(PreBuildEvent)]]></PreBuildEvent>
         <DCCReference Include="..\Source\uPasParserGrammar.pas"/>
         <DCCReference Include="..\Source\uCodeStyleConsts.pas"/>
         <DCCReference Include="..\Source\uCodeStyleRules.pas"/>
+        <DCCReference Include="..\Source\uCodeStyleProfileCatalog.pas"/>
+        <DCCReference Include="..\Source\uCodeStyleProfile.pas"/>
         <DCCReference Include="..\Source\uCodeStyleBasicRules.pas"/>
         <DCCReference Include="..\Source\uCodeStyleChecker.pas"/>
         <DCCReference Include="..\Source\uCodeStyleIDEServices.pas"/>
         <DCCReference Include="..\Source\uCodeStyleProjectChecker.pas"/>
         <DCCReference Include="..\Source\uCodeStyleCompileNotifier.pas"/>
+        <DCCReference Include="..\Source\Forms\ufmCodeStyleProfile.pas">
+            <Form>fmCodeStyleProfile</Form>
+        </DCCReference>
         <DCCReference Include="..\Source\uCodeStyleFeature.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

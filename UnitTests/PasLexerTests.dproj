@@ -122,6 +122,10 @@
         <DCCReference Include="..\Source\uPasParserGrammar.pas"/>
         <DCCReference Include="..\Source\uPasParserSettings.pas"/>
         <DCCReference Include="..\Source\uPasLexerPerformance.pas"/>
+        <DCCReference Include="..\Source\uCodeStyleConsts.pas"/>
+        <DCCReference Include="..\Source\uCodeStyleProfileCatalog.pas"/>
+        <DCCReference Include="..\Source\uCodeStyleProfile.pas"/>
+        <DCCReference Include="..\Source\TestuCodeStyleProfile.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

@@ -156,4 +156,13 @@ object fmMainTest: TfmMainTest
     TabOrder = 12
     OnClick = Button12Click
   end
+  object Button13: TButton
+    Left = 96
+    Top = 406
+    Width = 154
+    Height = 25
+    Caption = 'Show code style settings'
+    TabOrder = 13
+    OnClick = Button13Click
+  end
 end

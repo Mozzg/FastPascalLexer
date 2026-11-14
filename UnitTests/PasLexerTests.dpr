@@ -4,7 +4,8 @@
   -------------------------
   This is the single main unit test project for the FastPascalLexer repository.
   It registers and runs the complete test suite (TestuPasLexer,
-  TestuPasLexerAdditional and TestuPasParser) through the DUnit framework.
+  TestuPasLexerAdditional, TestuPasParser and TestuCodeStyleProfile) through
+  the DUnit framework.
 
   Configurations:
   - Debug / Release build the visual DUnit GUI test runner window — the
@@ -37,7 +38,11 @@ uses
   uPasParserTypes in '..\Source\uPasParserTypes.pas',
   uPasParserGrammar in '..\Source\uPasParserGrammar.pas',
   uPasParserSettings in '..\Source\uPasParserSettings.pas',
-  uPasLexerPerformance in '..\Source\uPasLexerPerformance.pas';
+  uPasLexerPerformance in '..\Source\uPasLexerPerformance.pas',
+  uCodeStyleConsts in '..\Source\uCodeStyleConsts.pas',
+  uCodeStyleProfileCatalog in '..\Source\uCodeStyleProfileCatalog.pas',
+  uCodeStyleProfile in '..\Source\uCodeStyleProfile.pas',
+  TestuCodeStyleProfile in '..\Source\TestuCodeStyleProfile.pas';
 
 {$R *.RES}
 

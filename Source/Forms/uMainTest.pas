@@ -6,7 +6,7 @@ uses
   Vcl.Forms, System.Classes, Vcl.Controls, Vcl.StdCtrls, System.SysUtils, System.TypInfo,
   System.StrUtils, System.IOUtils, System.Types, Winapi.Windows, Vcl.Dialogs,
   uPasLexer, uPasLexerTypes, uPasParser, uPasLexerPerformance, uPasExceptions,
-  uPasParserTypes, uPasParserGrammar;
+  uPasParserTypes, uPasParserGrammar, ufmCodeStyleProfile, uCodeStyleProfile;
 
 const
   COMMA_BOOL_ARRAY_SPACE: array [False .. True] of string = (', ', '');
@@ -30,6 +30,7 @@ type
     Button10: TButton;
     Button11: TButton;
     Button12: TButton;
+    Button13: TButton;
     procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
@@ -43,6 +44,7 @@ type
     procedure Button10Click(Sender: TObject);
     procedure Button11Click(Sender: TObject);
     procedure Button12Click(Sender: TObject);
+    procedure Button13Click(Sender: TObject);
   private type
     TMyClass122 = class( tobject)
       FField: Integer;
@@ -455,6 +457,21 @@ begin
 
   Log(Format(SUMMARY_FORMAT, [Length(Files), ErrorFileCount, SkippedCount]));
   Log('DONE');
+end;
+
+procedure TfmMainTest.Button13Click(Sender: TObject);
+var
+  Form: TfmCodeStyleProfile;
+  Profile: TCodeStyleProfile;
+begin
+  Form := TfmCodeStyleProfile.Create(Application);
+  Profile := TCodeStyleProfile.Create;
+  try
+    Form.Execute(Profile);
+  finally
+    Form.Free;
+    Profile.Free;
+  end;
 end;
 
 procedure TfmMainTest.Button1Click(Sender: TObject);

@@ -14,7 +14,7 @@ const
   );
   // More issues of one file are not shown, the Build tab would become unusable
   MAX_ISSUES_PER_FILE = 100;
-  // Maximum length of a line, section 2 of AGENTS.md
+  // Default maximum length of a line of the rule CS1001
   DEFAULT_MAX_LINE_LENGTH = 140;
   // Size of a block read from an editor buffer
   EDITOR_READ_BLOCK_SIZE = 64 * 1024;
@@ -33,14 +33,48 @@ const
   SETTINGS_NODE_RULES = 'Rules';
   SETTINGS_ATTRIBUTE_MAX_LENGTH = 'MaxLength';
 
+  // Names of the XML settings of the code style profile (uCodeStyleProfile)
+  SETTINGS_NODE_PROFILE = 'Profile';
+  PROFILE_ATTRIBUTE_LEVEL = 'Level';
+  // Root node and version of a profile file
+  PROFILE_FILE_ROOT_NODE = 'CodeStyleProfile';
+  PROFILE_ATTRIBUTE_VERSION = 'Version';
+  PROFILE_FILE_VERSION = 1;
+  PROFILE_FILE_ENCODING = 'UTF-8';
+  // Rule and option of the catalog that hold the name of the profile
+  PROFILE_RULE_PROFILE = 'Profile';
+  PROFILE_OPTION_PROFILE_NAME = 'ProfileName';
+
   // Names of the settings controls
   SETTINGS_FEATURE_CHECKBOX_NAME = 'cbCodeStyleCheck';
   SETTINGS_RULE_CHECKBOX_NAME = 'cbCodeStyleRule%s';
+  SETTINGS_PROFILE_PANEL_NAME = 'pnCodeStyleProfile';
 
 resourcestring
   SETTINGS_SECTION_NAME = 'Code style';
   SETTINGS_FEATURE_CHECKBOX_CAPTION = 'Check code style of the compiled modules';
   SETTINGS_RULE_CHECKBOX_CAPTION = '%s: %s';
+  SETTINGS_PROFILE_BUTTON_CAPTION = 'Code style profile...';
+  SETTINGS_PROFILE_SUMMARY = 'Profile "%s": %d of %d rules on, %d changed.'
+      + sLineBreak + 'The check does not use the profile yet.';
+
+  // Dialog of the code style profile (ufmCodeStyleProfile)
+  PROFILE_FORM_CAPTION = 'Code style profile (not used by the check yet)';
+  PROFILE_FILTER_ALL = 'All rules';
+  PROFILE_FILTER_ENABLED = 'Switched on';
+  PROFILE_FILTER_DISABLED = 'Switched off';
+  PROFILE_FILTER_CHANGED = 'Changed from the defaults';
+  // Line under the caption of a rule: its category, and whether it is changed
+  PROFILE_RULE_CHANGED = '%s; changed from the defaults';
+  // Line under the caption of a category: the number of its shown rules and of the switched on ones
+  PROFILE_CATEGORY_SUMMARY = 'Rules: %d, switched on: %d';
+  // Mark of a rule changed from the defaults in the Level column
+  PROFILE_LEVEL_CHANGED = '%s *';
+  PROFILE_OPTION_CAPTION = '%s:';
+  PROFILE_CONFIRM_RESET = 'Reset all rules to the default values?';
+  PROFILE_CONFIRM_SWITCH_OFF = 'Switch all rules off?';
+  PROFILE_LOAD_FAILED = 'Error loading the profile from %s:' + sLineBreak + '%s';
+  PROFILE_SAVE_FAILED = 'Error saving the profile to %s:' + sLineBreak + '%s';
 
   // Message texts, the rule code is added before them
   MESSAGE_PARSE_ERROR = 'Code style is not checked, the parser failed: %s';
@@ -52,6 +86,12 @@ resourcestring
   EMESSAGE_NO_COMPILE_SERVICES = 'Code style check is not enabled: the IDE does not provide IOTACompileServices.';
   // Context of the error in the plugin log, TWizardLogger.LogException adds the exception class and message
   EMESSAGE_CHECK_PROJECT_FAILED = 'Error checking code style of project %s';
+  EMESSAGE_PROFILE_FAILED = 'Error editing the code style profile';
+  EMESSAGE_PROFILE_UNKNOWN_CATEGORY = 'Code style profile: rule %s refers to the unknown category %s.';
+  EMESSAGE_PROFILE_UNKNOWN_RULE = 'Code style profile has no rule %s.';
+  EMESSAGE_PROFILE_UNKNOWN_OPTION = 'Rule %s of the code style profile has no option %s.';
+  EMESSAGE_PROFILE_INVALID_VALUE = 'Value "%s" is not valid for option %s of rule %s of the code style profile.';
+  EMESSAGE_PROFILE_INVALID_FILE = 'File %s is not a code style profile: its root node is "%s", expected "%s".';
 
   // Descriptions and messages of the rules
   RULE_LINE_LENGTH_DESCRIPTION = 'Line is longer than the limit';

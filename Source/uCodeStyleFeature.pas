@@ -5,9 +5,11 @@ unit uCodeStyleFeature;
 interface
 
 uses
-  System.SysUtils, System.Classes, Vcl.StdCtrls, Xml.XMLIntf, ToolsAPI,
-  uBaseFeature, uFeatureCollection, ufmWizardSettings,
-  uCodeStyleConsts, uCodeStyleRules, uCodeStyleProjectChecker, uCodeStyleCompileNotifier;
+  System.SysUtils, System.Classes, Winapi.Windows, Vcl.Forms, Vcl.Controls, Vcl.StdCtrls, Vcl.ExtCtrls, Xml.XMLIntf,
+  ToolsAPI,
+  uWizardConsts, uBaseFeature, uFeatureCollection, ufmWizardSettings,
+  uCodeStyleConsts, uCodeStyleRules, uCodeStyleProfile, uCodeStyleProjectChecker, uCodeStyleCompileNotifier,
+  ufmCodeStyleProfile;
 
 type
   TCodeStyleFeature = class(TBaseFeature)
@@ -21,14 +23,22 @@ type
     FCompileNotifierIndex: Integer;
     // Parent will be frame, so no need to free
     FSettingsCheckBox: TCheckBox;
+    // Settings of the code style rules; only edited and stored, the check does not use them yet
+    FProfile: TCodeStyleProfile;
+    // Summary of the profile under its button; parent will be frame, so no need to free
+    FProfileSummaryLabel: TLabel;
 
     procedure RegisterCompileNotifier;
     procedure UnregisterCompileNotifier;
     // Creates a check box in the section of the feature; its parent frame frees it
     function AddSettingsCheckBox(ASettingsForm: TfmWizardSettings; const AName, ACaption: string; AChecked: Boolean;
         AOnClick: TNotifyEvent): TCheckBox;
+    // Creates the button of the profile dialog and the summary label in the section of the feature
+    procedure AddProfileControls(ASettingsForm: TfmWizardSettings);
+    procedure UpdateProfileSummary;
     procedure SettingsCheckBoxClick(Sender: TObject);
     procedure RuleCheckBoxClick(Sender: TObject);
+    procedure ProfileButtonClick(Sender: TObject);
   protected
     procedure SetFeatureEnabled(Value: Boolean); override;
   public
@@ -52,6 +62,7 @@ begin
   UnregisterCompileNotifier;
   FreeAndNil(FProjectChecker);
   FreeAndNil(FRuleSet);
+  FreeAndNil(FProfile);
 
   inherited Destroy;
 end;
@@ -103,6 +114,57 @@ begin
   end;
 end;
 
+procedure TCodeStyleFeature.AddProfileControls(ASettingsForm: TfmWizardSettings);
+const
+  BUTTON_WIDTH = 180;
+  BUTTON_HEIGHT = 25;
+  LABEL_TOP = 31;
+  PANEL_HEIGHT = 64;
+var
+  ProfilePanel: TPanel;
+  ProfileButton: TButton;
+  ThemingServices: IOTAIDEThemingServices;
+begin
+  // Before the dialog is created, so the IDE applies its style to it
+  if Supports(BorlandIDEServices, IOTAIDEThemingServices, ThemingServices) then
+    ThemingServices.RegisterFormClass(TfmCodeStyleProfile);
+
+  ProfilePanel := TPanel.Create(nil);
+  try
+    ProfilePanel.Name := SETTINGS_PROFILE_PANEL_NAME;
+    ProfilePanel.Caption := '';
+    ProfilePanel.BevelOuter := bvNone;
+    ProfilePanel.Height := PANEL_HEIGHT;
+
+    // The panel frees its controls
+    ProfileButton := TButton.Create(ProfilePanel);
+    ProfileButton.Parent := ProfilePanel;
+    ProfileButton.SetBounds(0, 0, BUTTON_WIDTH, BUTTON_HEIGHT);
+    ProfileButton.Caption := SETTINGS_PROFILE_BUTTON_CAPTION;
+    ProfileButton.OnClick := ProfileButtonClick;
+
+    FProfileSummaryLabel := TLabel.Create(ProfilePanel);
+    FProfileSummaryLabel.Parent := ProfilePanel;
+    FProfileSummaryLabel.Left := 0;
+    FProfileSummaryLabel.Top := LABEL_TOP;
+    UpdateProfileSummary;
+
+    // Assigning parent to control
+    ASettingsForm.AddSettingsControl(SETTINGS_SECTION_NAME, ProfilePanel);
+  except
+    FProfileSummaryLabel := nil;
+    ProfilePanel.Free;
+    raise;
+  end;
+end;
+
+procedure TCodeStyleFeature.UpdateProfileSummary;
+begin
+  if Assigned(FProfileSummaryLabel) then
+    FProfileSummaryLabel.Caption := Format(SETTINGS_PROFILE_SUMMARY, [FProfile.Name, FProfile.GetEnabledRuleCount,
+        FProfile.GetCheckRuleCount, FProfile.GetChangedRuleCount]);
+end;
+
 procedure TCodeStyleFeature.SettingsCheckBoxClick(Sender: TObject);
 begin
   ApplyCheckBoxState(Sender as TCheckBox);
@@ -115,6 +177,36 @@ begin
   // The cache of the checked sources is cleared when the settings are saved
   RuleCheckBox := Sender as TCheckBox;
   FRuleSet[RuleCheckBox.Tag].Enabled := RuleCheckBox.Checked;
+end;
+
+procedure TCodeStyleFeature.ProfileButtonClick(Sender: TObject);
+var
+  ProfileForm: TfmCodeStyleProfile;
+  ThemingServices: IOTAIDEThemingServices;
+  ErrorMessage: string;
+begin
+  // The profile is saved with the other settings when the settings form is closed
+  try
+    ProfileForm := TfmCodeStyleProfile.Create(nil);
+    try
+      if Supports(BorlandIDEServices, IOTAIDEThemingServices, ThemingServices)
+          and ThemingServices.IDEThemingEnabled
+      then
+        ThemingServices.ApplyTheme(ProfileForm);
+      if ProfileForm.Execute(FProfile) then
+        UpdateProfileSummary;
+    finally
+      ProfileForm.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      FLogger.LogException(EMESSAGE_PROFILE_FAILED, E);
+      // The settings form is modal and covers the message view, so the error is also shown to the user
+      ErrorMessage := EMESSAGE_PROFILE_FAILED + ': ' + E.Message;
+      Application.MessageBox(PChar(ErrorMessage), PChar(WIZARD_NAME), MB_OK or MB_ICONERROR);
+    end;
+  end;
 end;
 
 procedure TCodeStyleFeature.SetFeatureEnabled(Value: Boolean);
@@ -136,6 +228,8 @@ begin
   // Before the settings are read: enabling the feature registers the notifier with the project checker
   if not Assigned(FRuleSet) then
     FRuleSet := TCodeStyleRuleSet.Create;
+  if not Assigned(FProfile) then
+    FProfile := TCodeStyleProfile.Create;
   if not Assigned(FProjectChecker) then
     FProjectChecker := TCodeStyleProjectChecker.Create(FRuleSet);
 
@@ -159,11 +253,15 @@ begin
         Format(SETTINGS_RULE_CHECKBOX_CAPTION, [Rule.GetCode, Rule.GetDescription]), Rule.Enabled, RuleCheckBoxClick);
     RuleCheckBox.Tag := i;
   end;
+
+  AddProfileControls(ASettingsForm);
 end;
 
 procedure TCodeStyleFeature.ReadFeatureSettings(AFeatureSettings: IXMLNode);
 begin
   FRuleSet.ReadSettings(AFeatureSettings.ChildNodes[SETTINGS_NODE_RULES]);
+  // A missing node gives the default values
+  FProfile.ReadSettings(AFeatureSettings.ChildNodes.FindNode(SETTINGS_NODE_PROFILE));
 
   inherited ReadFeatureSettings(AFeatureSettings);
 end;
@@ -173,6 +271,7 @@ begin
   inherited WriteFeatureSettings(AFeatureSettings);
 
   FRuleSet.WriteSettings(AFeatureSettings.ChildNodes[SETTINGS_NODE_RULES]);
+  FProfile.WriteSettings(AFeatureSettings.ChildNodes[SETTINGS_NODE_PROFILE]);
   // The rules could change, the next compilation checks all sources with them
   FProjectChecker.ClearCache;
 end;

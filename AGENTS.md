@@ -19,14 +19,17 @@ Repository layout:
   - `uPasParserSettings.pas` — a stub for future parser settings; not used yet.
   - `uPasLexerPerformance.pas` — measurement tools (`THighResolutionStopwatch`,
     `TMeasureThread`) used by TestApp; not part of the lexer.
-  - `TestuPasLexer.pas`, `TestuPasLexerAdditional.pas`, `TestuPasParser.pas` —
-    the DUnit tests (section 4).
+  - `TestuPasLexer.pas`, `TestuPasLexerAdditional.pas`, `TestuPasParser.pas`,
+    `TestuCodeStyleProfile.pas` — the DUnit tests (section 4).
   - `uLexerBenchmark.pas`, `uLexerBenchmarkConsts.pas` — the console benchmark.
-  - `uCodeStyle*.pas` — the code style feature of the IDE plugin;
-    `uWizard*.pas`, `uBaseFeature.pas`, `uFeatureCollection.pas` — the copy of
-    the DICE framework it runs on (see `IDEPlugin/README.md`).
+  - `uCodeStyle*.pas` — the code style feature of the IDE plugin, with the
+    code style profile (`uCodeStyleProfile*.pas`: settings of the rules, not
+    used by the check yet); `uWizard*.pas`, `uBaseFeature.pas`,
+    `uFeatureCollection.pas` — the copy of the DICE framework it runs on (see
+    `IDEPlugin/README.md`).
   - `Forms/` — the forms and frames (`.pas` with `.dfm`): `uMainTest` of
-    TestApp, `ufmWizardSettings` and `ufrBaseSettings` of the IDE plugin.
+    TestApp, `ufmWizardSettings` and `ufrBaseSettings` of the IDE plugin,
+    `ufmCodeStyleProfile` (the profile dialog) of the code style feature.
   - `ThirdParty/FastMM5/` — the FastMM5 memory manager, a git submodule
     (`pleriche/FastMM5`, pinned commit) used by TestApp.
 - `TestApp/` — VCL GUI test/benchmark application (`TestApp.dpr`).
@@ -462,6 +465,9 @@ own, also when the layout may explain the difference.
   the grammar comes with a test; `TestRepositorySources` parses the sources
   of this repository (`Source`, `Source\Forms` and the project folders, not
   recursively), so new code here must stay parsable.
+- Tests of the code style profile and of the consistency of its catalog go
+  into `Source/TestuCodeStyleProfile.pas`; every change of the catalog
+  (`uCodeStyleProfileCatalog.pas`) must keep them passing.
 - Test methods are named `Test<WhatIsChecked>` (e.g.
   `TestNumbersExponentAndHex`) and declared in the `published` section.
 - Build test data paths relative to the executable, as the existing tests do:
@@ -473,7 +479,9 @@ own, also when the layout may explain the difference.
   on Win32 and, for low-level changes, on Win64 too.
 - The test project also compiles `uPasParserSettings.pas` and
   `uPasLexerPerformance.pas` so that their compilation is checked; they have
-  no tests.
+  no tests. It also compiles `uCodeStyleConsts.pas`,
+  `uCodeStyleProfileCatalog.pas` and `uCodeStyleProfile.pas` for
+  `TestuCodeStyleProfile`.
 
 ---
 
