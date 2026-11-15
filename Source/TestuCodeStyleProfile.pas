@@ -20,7 +20,12 @@ type
     // True for a name that can be an XML node or attribute name: a Latin letter, then Latin letters and digits
     function IsXmlName(const AName: string): Boolean;
     function GetOption(const ARuleId, AOptionName: string): TCodeStyleProfileOption;
-    // Changes rules of every kind of option, so a round trip has something to keep
+    // Finds a template option with a per-rule default (ARuleOption of ARule) and the same option of another rule of the
+    // template without one (AOtherOption)
+    function FindTemplateDefault(out ARule: TCodeStyleProfileRule;
+        out ARuleOption, AOtherOption: TCodeStyleProfileOption): Boolean;
+    // Changes 6 rules with every kind of option to values other than their defaults, so a round trip has something to
+    // keep; the default values themselves are not known to the tests
     procedure ChangeProfile(AProfile: TCodeStyleProfile);
     procedure CheckProfilesEqual(AExpected, AActual: TCodeStyleProfile; const AMessage: string);
   public
@@ -31,7 +36,7 @@ type
     // Every template is used and every rule with a template has its options
     procedure TestCatalogTemplates;
     procedure TestCatalogDefaults;
-    // The default values of a new profile
+    // A new profile has the default levels and values of the catalog, whatever they are
     procedure TestDefaultStyle;
     procedure TestOptionValues;
     procedure TestQuantityValues;
@@ -50,6 +55,29 @@ implementation
 
 const
   TEST_PROFILE_FILE_NAME = 'CodeStyleProfileTest.xml';
+  TEST_PROFILE_NAME = 'My style';
+  // A name added to a list of allowed names, unlikely to be there by default
+  TEST_ALLOWED_NAME = 'TestAllowedName';
+
+{ }
+
+// Another level than ALevel, so setting it always changes a rule
+function GetOtherLevel(ALevel: TCodeStyleLevel): TCodeStyleLevel;
+begin
+  if ALevel = cslError then
+    Result := cslHint
+  else
+    Result := Succ(ALevel);
+end;
+
+// Another valid value of an integer option than its current one
+function GetOtherInteger(AOption: TCodeStyleProfileOption): Integer;
+begin
+  if AOption.AsInteger < AOption.Info.MaxValue then
+    Result := AOption.AsInteger + 1
+  else
+    Result := AOption.AsInteger - 1;
+end;
 
 { TestTCodeStyleProfile }
 
@@ -67,17 +95,57 @@ begin
   Result := FProfile.RuleById(ARuleId).OptionByName(AOptionName);
 end;
 
-procedure TestTCodeStyleProfile.ChangeProfile(AProfile: TCodeStyleProfile);
+function TestTCodeStyleProfile.FindTemplateDefault(out ARule: TCodeStyleProfileRule;
+    out ARuleOption, AOtherOption: TCodeStyleProfileOption): Boolean;
+var
+  DefaultInfo: TCodeStyleDefaultInfo;
+  i: Integer;
 begin
-  AProfile.RuleById('Profile').OptionByName('ProfileName').Value := 'My style';
-  AProfile.RuleById('LineLength').Level := cslError;
-  AProfile.RuleById('LineLength').OptionByName('MaxLength').AsInteger := 100;
-  AProfile.RuleById('TabsInsideLines').Level := cslHint;
-  AProfile.RuleById('TabsInsideLines').OptionByName('AllowInComments').AsBoolean := False;
-  AProfile.RuleById('ReservedWordCase').OptionByName('Case').Value := 'Upper';
-  AProfile.RuleById('NamesParameters').OptionByName('AllowedNames').Items := TArray<string>.Create('Value', 'Sender',
-      'Index');
-  AProfile.RuleById('SpacesAssignment').OptionByName('SpacesAfter').SetQuantity(cqmExactly, 2);
+  for DefaultInfo in CODE_STYLE_DEFAULTS do
+  begin
+    ARule := FProfile.RuleById(DefaultInfo.Rule);
+    ARuleOption := ARule.OptionByName(DefaultInfo.Option);
+    if not ARuleOption.Info.Rule.StartsWith(CODE_STYLE_TEMPLATE_PREFIX) then
+      Continue;
+    for i := 0 to FProfile.RuleCount - 1 do
+    begin
+      if (FProfile[i] = ARule) or (FProfile[i].Info.Template <> ARule.Info.Template) then
+        Continue;
+      AOtherOption := FProfile[i].FindOption(DefaultInfo.Option);
+      // A per-rule default always differs from the template default (TestCatalogDefaults)
+      if Assigned(AOtherOption) and (AOtherOption.DefaultValue = AOtherOption.Info.DefaultValue) then
+        Exit(True);
+    end;
+  end;
+  ARule := nil;
+  ARuleOption := nil;
+  AOtherOption := nil;
+  Result := False;
+end;
+
+procedure TestTCodeStyleProfile.ChangeProfile(AProfile: TCodeStyleProfile);
+var
+  Rule: TCodeStyleProfileRule;
+  Option: TCodeStyleProfileOption;
+begin
+  AProfile.RuleById('Profile').OptionByName('ProfileName').Value := TEST_PROFILE_NAME;
+  Rule := AProfile.RuleById('LineLength');
+  Rule.Level := GetOtherLevel(Rule.Info.Level);
+  Option := Rule.OptionByName('MaxLength');
+  Option.AsInteger := GetOtherInteger(Option);
+  Rule := AProfile.RuleById('TabsInsideLines');
+  Rule.Level := GetOtherLevel(Rule.Info.Level);
+  Option := Rule.OptionByName('AllowInComments');
+  Option.AsBoolean := not Option.AsBoolean;
+  Option := AProfile.RuleById('ReservedWordCase').OptionByName('Case');
+  Option.ChoiceIndex := (Option.ChoiceIndex + 1) mod Option.ChoiceCount;
+  Option := AProfile.RuleById('NamesParameters').OptionByName('AllowedNames');
+  Option.Items := Option.Items + [TEST_ALLOWED_NAME];
+  Option := AProfile.RuleById('SpacesAssignment').OptionByName('SpacesAfter');
+  if Option.Value = 'Exactly:2' then
+    Option.SetQuantity(cqmExactly, 3)
+  else
+    Option.SetQuantity(cqmExactly, 2);
 end;
 
 procedure TestTCodeStyleProfile.CheckProfilesEqual(AExpected, AActual: TCodeStyleProfile; const AMessage: string);
@@ -250,62 +318,73 @@ begin
 end;
 
 procedure TestTCodeStyleProfile.TestDefaultStyle;
+var
+  Rule: TCodeStyleProfileRule;
+  Option: TCodeStyleProfileOption;
+  CheckRuleCount, EnabledRuleCount, i, j: Integer;
 begin
-  CheckEquals('Default', FProfile.Name, 'Profile name');
+  CheckEquals(GetOption('Profile', 'ProfileName').DefaultValue, FProfile.Name, 'Profile name');
   CheckEquals(0, FProfile.GetChangedRuleCount, 'Changed rules of a new profile');
-  CheckTrue(FProfile.GetEnabledRuleCount > 20, 'Common rules are switched on');
-  CheckTrue(FProfile.GetEnabledRuleCount < FProfile.GetCheckRuleCount, 'Opinionated rules are switched off');
-
-  CheckEquals(Ord(cslHint), Ord(FProfile.RuleById('SpacesAssignment').Level), 'Spaces around :=');
-  CheckEquals('Exactly:1', GetOption('SpacesAssignment', 'SpacesBefore').Value, 'Spaces before :=');
-  CheckEquals('Exactly:0', GetOption('SpacesComma', 'SpacesBefore').Value, 'Spaces before a comma');
-  CheckEquals('Exactly:1', GetOption('SpacesComma', 'SpacesAfter').Value, 'Spaces after a comma');
-  CheckEquals('Exactly:0', GetOption('SpacesCallParentheses', 'SpacesBeforeOpening').Value, 'Call parenthesis');
-  CheckEquals('Any', GetOption('SpacesParentheses', 'SpacesBeforeOpening').Value, 'Grouping parenthesis');
-  CheckEquals(2, GetOption('BlockIndent', 'Size').AsInteger, 'Block indent');
-  CheckEquals(1, GetOption('IndentStatements', 'Indent').AsInteger, 'Statements in begin-end');
-  CheckEquals(0, GetOption('IndentRoutineBody', 'Indent').AsInteger, 'Body of a routine');
-  CheckEquals('Lower', GetOption('ReservedWordCase', 'Case').Value, 'Reserved words');
-  CheckEquals('T', GetOption('NamesClasses', 'Prefixes').Value, 'Class prefix');
-  CheckEquals('I', GetOption('NamesInterfaces', 'Prefixes').Value, 'Interface prefix');
-  CheckEquals('F', GetOption('NamesPrivateFields', 'Prefixes').Value, 'Field prefix');
-  CheckEquals('', GetOption('NamesLocalVariables', 'Prefixes').Value, 'Local variables have no prefix');
-  CheckEquals('Value;Sender', GetOption('NamesParameters', 'AllowedNames').Value, 'Parameter names without prefix');
-  CheckEquals(Ord(cslOff), Ord(FProfile.RuleById('NamesParameters').Level), 'Parameter prefix is opinionated');
-  CheckEquals(Ord(cslOff), Ord(FProfile.RuleById('WithStatement').Level), 'with statement is opinionated');
+  CheckRuleCount := 0;
+  EnabledRuleCount := 0;
+  for i := 0 to FProfile.RuleCount - 1 do
+  begin
+    Rule := FProfile[i];
+    CheckEquals(Ord(Rule.Info.Level), Ord(Rule.Level), 'Default level of ' + Rule.Id);
+    CheckTrue(Rule.IsDefault, 'New rule ' + Rule.Id);
+    for j := 0 to Rule.OptionCount - 1 do
+    begin
+      Option := Rule.Options[j];
+      CheckEquals(Option.DefaultValue, Option.Value, 'Default value of ' + Rule.Id + '.' + Option.Name);
+    end;
+    if not Rule.Info.WithoutLevel then
+    begin
+      Inc(CheckRuleCount);
+      if Rule.Level <> cslOff then
+        Inc(EnabledRuleCount);
+    end;
+  end;
+  CheckEquals(CheckRuleCount, FProfile.GetCheckRuleCount, 'Rules with a level');
+  CheckEquals(EnabledRuleCount, FProfile.GetEnabledRuleCount, 'Switched on rules');
 end;
 
 procedure TestTCodeStyleProfile.TestOptionValues;
 var
   Option: TCodeStyleProfileOption;
   Items: TArray<string>;
+  NewBoolean: Boolean;
+  NewInteger: Integer;
 begin
   Option := GetOption('TabsInsideLines', 'AllowInComments');
-  Option.Value := 'false';
-  CheckEquals(CODE_STYLE_FALSE, Option.Value, 'Boolean is normalized');
-  CheckFalse(Option.AsBoolean, 'AsBoolean');
+  NewBoolean := not Option.AsBoolean;
+  Option.Value := LowerCase(System.SysUtils.BoolToStr(NewBoolean, True));
+  CheckEquals(System.SysUtils.BoolToStr(NewBoolean, True), Option.Value, 'Boolean is normalized');
+  CheckEquals(NewBoolean, Option.AsBoolean, 'AsBoolean');
   CheckFalse(Option.IsDefault, 'Changed boolean');
   CheckFalse(Option.IsValidValue('Yes'), 'Invalid boolean');
 
   Option := GetOption('LineLength', 'MaxLength');
-  CheckTrue(Option.IsValidValue(' 20 '), 'Minimum integer');
-  CheckFalse(Option.IsValidValue('19'), 'Integer below the range');
-  CheckFalse(Option.IsValidValue('1001'), 'Integer above the range');
+  CheckTrue(Option.IsValidValue(Format(' %d ', [Option.Info.MinValue])), 'Minimum integer');
+  CheckFalse(Option.IsValidValue(IntToStr(Option.Info.MinValue - 1)), 'Integer below the range');
+  CheckFalse(Option.IsValidValue(IntToStr(Option.Info.MaxValue + 1)), 'Integer above the range');
   CheckFalse(Option.IsValidValue('12a'), 'Not an integer');
-  Option.AsInteger := 100;
-  CheckEquals('100', Option.Value, 'AsInteger');
+  NewInteger := GetOtherInteger(Option);
+  Option.AsInteger := NewInteger;
+  CheckEquals(IntToStr(NewInteger), Option.Value, 'AsInteger');
   try
-    Option.Value := '5';
+    Option.Value := IntToStr(Option.Info.MinValue - 1);
     Fail('Invalid value is stored');
   except
     on E: ECodeStyleProfileError do
-      CheckEquals('100', Option.Value, 'Value after an invalid value');
+      CheckEquals(IntToStr(NewInteger), Option.Value, 'Value after an invalid value');
   end;
 
   Option := GetOption('NamesParameters', 'AllowedNames');
+  // The default list written with extra spaces and empty items
+  Option.Value := ' ' + StringReplace(Option.DefaultValue, CODE_STYLE_LIST_SEPARATOR, ' ; ;', [rfReplaceAll]) + ';';
+  CheckTrue(Option.IsDefault, 'Normalized text list is the default');
   Option.Value := ' Value ; ;Sender;';
   CheckEquals('Value;Sender', Option.Value, 'Text list is normalized');
-  CheckTrue(Option.IsDefault, 'Normalized text list is the default');
   Option.Items := TArray<string>.Create(' Index ', '', 'Count;Size');
   CheckEquals('Index;CountSize', Option.Value, 'Items drop empty items and separators');
   Items := Option.Items;
@@ -330,8 +409,9 @@ var
   Option: TCodeStyleProfileOption;
 begin
   Option := GetOption('SpacesAssignment', 'SpacesAfter');
-  CheckEquals(Ord(cqmExactly), Ord(Option.QuantityMode), 'Default mode');
-  CheckEquals(1, Option.QuantityCount, 'Default count');
+  Option.Value := 'Exactly:1';
+  CheckEquals(Ord(cqmExactly), Ord(Option.QuantityMode), 'Mode of Exactly');
+  CheckEquals(1, Option.QuantityCount, 'Count of Exactly');
 
   Option.Value := ' atleast : 2 ';
   CheckEquals('AtLeast:2', Option.Value, 'Quantity is normalized');
@@ -340,13 +420,13 @@ begin
   Option.Value := 'any';
   CheckEquals('Any', Option.Value, 'Any');
   CheckEquals(0, Option.QuantityCount, 'Count of Any');
-  Option.SetQuantity(cqmAtMost, 0);
-  CheckEquals('AtMost:0', Option.Value, 'SetQuantity');
+  Option.SetQuantity(cqmAtMost, Option.Info.MinValue);
+  CheckEquals(Format('AtMost:%d', [Option.Info.MinValue]), Option.Value, 'SetQuantity');
   Option.SetQuantity(cqmAny, 5);
   CheckEquals('Any', Option.Value, 'SetQuantity ignores the count of Any');
 
-  CheckTrue(Option.IsValidValue('Exactly:10'), 'Maximum count');
-  CheckFalse(Option.IsValidValue('Exactly:11'), 'Count above the range');
+  CheckTrue(Option.IsValidValue(Format('Exactly:%d', [Option.Info.MaxValue])), 'Maximum count');
+  CheckFalse(Option.IsValidValue(Format('Exactly:%d', [Option.Info.MaxValue + 1])), 'Count above the range');
   CheckFalse(Option.IsValidValue('Exactly:-1'), 'Count below the range');
   CheckFalse(Option.IsValidValue('Exactly'), 'Mode without a count');
   CheckFalse(Option.IsValidValue('Any:1'), 'Any with a count');
@@ -356,20 +436,22 @@ end;
 
 procedure TestTCodeStyleProfile.TestRuleDefaults;
 var
-  CommaOption, PlusOption: TCodeStyleProfileOption;
+  RuleOption, OtherOption: TCodeStyleProfileOption;
+  Rule: TCodeStyleProfileRule;
+  RuleDefault: string;
 begin
-  // Both options come from the template Spaces, only the comma has a default of its own
-  CommaOption := GetOption('SpacesComma', 'SpacesBefore');
-  PlusOption := GetOption('SpacesPlus', 'SpacesBefore');
-  CheckEquals(CommaOption.Info.Rule, PlusOption.Info.Rule, 'One template option');
-  CheckEquals('Exactly:0', CommaOption.DefaultValue, 'Default of the comma');
-  CheckEquals('Exactly:1', PlusOption.DefaultValue, 'Default of the plus');
+  // Both options come from one template, only the first rule has a default of its own
+  CheckTrue(FindTemplateDefault(Rule, RuleOption, OtherOption), 'A per-rule default of a template option');
+  CheckEquals(RuleOption.Info.Rule, OtherOption.Info.Rule, 'One template option');
+  RuleDefault := RuleOption.DefaultValue;
+  CheckNotEquals(RuleOption.Info.DefaultValue, RuleDefault, 'Default of the rule');
+  CheckEquals(OtherOption.Info.DefaultValue, OtherOption.DefaultValue, 'Default of the other rule');
 
-  CommaOption.SetQuantity(cqmExactly, 1);
-  CheckFalse(CommaOption.IsDefault, 'The template default is not the default of the comma');
-  CheckFalse(FProfile.RuleById('SpacesComma').IsDefault, 'Changed rule');
-  FProfile.RuleById('SpacesComma').Reset;
-  CheckEquals('Exactly:0', CommaOption.Value, 'Reset returns to the default of the comma');
+  RuleOption.Value := RuleOption.Info.DefaultValue;
+  CheckFalse(RuleOption.IsDefault, 'The template default is not the default of the rule');
+  CheckFalse(Rule.IsDefault, 'Changed rule');
+  Rule.Reset;
+  CheckEquals(RuleDefault, RuleOption.Value, 'Reset returns to the default of the rule');
 end;
 
 procedure TestTCodeStyleProfile.TestRuleSpecificOptions;
@@ -398,7 +480,7 @@ begin
 
   // One gap between two declarations, one count
   CheckEquals(1, FProfile.RuleById('BlankLinesBetweenRoutines').OptionCount, 'Blank lines between routines');
-  CheckEquals('AtLeast:1', GetOption('BlankLinesBetweenTypes', 'LinesBetween').Value, 'Blank lines between types');
+  CheckEquals(1, FProfile.RuleById('BlankLinesBetweenTypes').OptionCount, 'Blank lines between types');
 
   // A number instead of a choice that said the same
   CheckNull(FProfile.RuleById('UsesLayout').FindOption('Layout'), 'Layout of uses clauses');
@@ -410,9 +492,9 @@ begin
   CheckEquals(0, FProfile.RuleById('IdentifierCharacters').OptionCount, 'Characters of identifiers');
 
   // Both directions of a style
-  CheckEquals('ResultExit', GetOption('ExitWithValue', 'PreferredForm').Value, 'Exit with a value');
+  CheckTrue(GetOption('ExitWithValue', 'PreferredForm').IsValidValue('ResultExit'), 'Result := Value; Exit can be required');
   CheckTrue(GetOption('ExitWithValue', 'PreferredForm').IsValidValue('ExitValue'), 'Exit(Value) can be required');
-  CheckEquals('Explicit', GetOption('PointerDereference', 'Form').Value, 'Dereference');
+  CheckTrue(GetOption('PointerDereference', 'Form').IsValidValue('Explicit'), 'Item^.Name can be required');
   CheckTrue(GetOption('PointerDereference', 'Form').IsValidValue('Implicit'), 'Item.Name can be required');
 
   // New values and options
@@ -420,16 +502,17 @@ begin
   CheckTrue(GetOption('CompilerDirectiveCase', 'Case').IsValidValue('Pascal'), '{$IfDef}');
   CheckTrue(GetOption('FileEncoding', 'Encoding').IsValidValue('Ansi'), 'ANSI encoding');
   CheckFalse(GetOption('FileEncoding', 'Encoding').IsValidValue('Ascii'), 'ASCII is a check box, not an encoding');
-  CheckFalse(GetOption('NamesPrivateFields', 'IncludeClassFields').AsBoolean, 'Class var fields');
-  CheckFalse(GetOption('NamesGlobalConstants', 'IncludeTypedConstants').AsBoolean, 'Typed constants');
-  CheckEquals(3, GetOption('NumberLiterals', 'DigitsPerGroup').AsInteger, 'Decimal digit groups');
-  CheckEquals(4, GetOption('NumberLiterals', 'HexDigitsPerGroup').AsInteger, 'Hexadecimal digit groups');
-  CheckEquals('Exactly:0', GetOption('SpacesPointerType', 'SpacesAfter').Value, 'Spaces after ^ of a pointer type');
+  CheckNotNull(FProfile.RuleById('NamesPrivateFields').FindOption('IncludeClassFields'), 'Class var fields');
+  CheckNotNull(FProfile.RuleById('NumberLiterals').FindOption('DigitsPerGroup'), 'Decimal digit groups');
+  CheckNotNull(FProfile.RuleById('NumberLiterals').FindOption('HexDigitsPerGroup'), 'Hexadecimal digit groups');
+  CheckNotNull(FProfile.RuleById('SpacesPointerType').FindOption('SpacesAfter'), 'Spaces after ^ of a pointer type');
 end;
 
 procedure TestTCodeStyleProfile.TestAssignResetSwitchOff;
 var
   ProfileCopy: TCodeStyleProfile;
+  MaxLengthOption: TCodeStyleProfileOption;
+  ChangedValue: string;
   CheckRuleCount: Integer;
 begin
   ChangeProfile(FProfile);
@@ -445,15 +528,19 @@ begin
     ProfileCopy.Free;
   end;
 
+  MaxLengthOption := GetOption('LineLength', 'MaxLength');
+  ChangedValue := MaxLengthOption.Value;
   FProfile.Reset;
   CheckEquals(0, FProfile.GetChangedRuleCount, 'Reset');
-  CheckEquals(120, GetOption('LineLength', 'MaxLength').AsInteger, 'Option after Reset');
+  CheckNotEquals(ChangedValue, MaxLengthOption.Value, 'Option after Reset');
+  CheckEquals(MaxLengthOption.DefaultValue, MaxLengthOption.Value, 'Default value after Reset');
 
+  ChangeProfile(FProfile);
   CheckRuleCount := FProfile.GetCheckRuleCount;
   FProfile.SwitchOffAll;
   CheckEquals(0, FProfile.GetEnabledRuleCount, 'SwitchOffAll');
   CheckEquals(CheckRuleCount, FProfile.GetCheckRuleCount, 'Rules after SwitchOffAll');
-  CheckEquals(120, GetOption('LineLength', 'MaxLength').AsInteger, 'Options keep their values');
+  CheckEquals(ChangedValue, MaxLengthOption.Value, 'Options keep their values');
 end;
 
 procedure TestTCodeStyleProfile.TestXmlRoundTrip;
@@ -469,9 +556,11 @@ begin
   // Every rule is written to the node of its category
   CheckEquals(Length(CODE_STYLE_CATEGORIES), ProfileNode.ChildNodes.Count, 'Category nodes');
   LineLengthNode := ProfileNode.ChildNodes['Lines'].ChildNodes['LineLength'];
-  CheckEquals('Error', VarToStr(LineLengthNode.Attributes[PROFILE_ATTRIBUTE_LEVEL]), 'Level attribute');
-  CheckEquals('100', VarToStr(LineLengthNode.Attributes['MaxLength']), 'Option attribute');
-  CheckEquals('Exactly:2',
+  CheckEquals(CODE_STYLE_LEVEL_NAMES[FProfile.RuleById('LineLength').Level],
+      VarToStr(LineLengthNode.Attributes[PROFILE_ATTRIBUTE_LEVEL]), 'Level attribute');
+  CheckEquals(GetOption('LineLength', 'MaxLength').Value, VarToStr(LineLengthNode.Attributes['MaxLength']),
+      'Option attribute');
+  CheckEquals(GetOption('SpacesAssignment', 'SpacesAfter').Value,
       VarToStr(ProfileNode.ChildNodes['Operators'].ChildNodes['SpacesAssignment'].Attributes['SpacesAfter']),
       'Quantity attribute');
   CheckFalse(ProfileNode.ChildNodes['General'].ChildNodes['Profile'].HasAttribute(PROFILE_ATTRIBUTE_LEVEL),
@@ -493,36 +582,47 @@ procedure TestTCodeStyleProfile.TestXmlInvalidValues;
 var
   Document: IXMLDocument;
   ProfileNode, RuleNode: IXMLNode;
+  BooleanComparisonRule, IndentStatementsRule: TCodeStyleProfileRule;
+  NewBoolean: Boolean;
 begin
+  BooleanComparisonRule := FProfile.RuleById('BooleanComparison');
+  IndentStatementsRule := FProfile.RuleById('IndentStatements');
+  NewBoolean := not GetOption('LineLength', 'IgnoreCommentLines').AsBoolean;
+
   Document := NewXMLDocument;
   ProfileNode := Document.AddChild(SETTINGS_NODE_PROFILE);
   RuleNode := ProfileNode.AddChild('Lines').AddChild('LineLength');
   RuleNode.Attributes[PROFILE_ATTRIBUTE_LEVEL] := 'Fatal';
-  RuleNode.Attributes['MaxLength'] := '5000';
-  RuleNode.Attributes['IgnoreCommentLines'] := 'true';
+  RuleNode.Attributes['MaxLength'] := IntToStr(GetOption('LineLength', 'MaxLength').Info.MaxValue + 1);
+  RuleNode.Attributes['IgnoreCommentLines'] := LowerCase(System.SysUtils.BoolToStr(NewBoolean, True));
   RuleNode := ProfileNode.AddChild('Operators').AddChild('SpacesAssignment');
-  RuleNode.Attributes['SpacesBefore'] := 'Exactly:20';
+  RuleNode.Attributes['SpacesBefore'] := Format('Exactly:%d', [GetOption('SpacesAssignment', 'SpacesBefore').Info.MaxValue + 1]);
   RuleNode.Attributes['SpacesAfter'] := 'atmost:0';
   RuleNode := ProfileNode.AddChild('Case').AddChild('ReservedWordCase');
   RuleNode.Attributes[PROFILE_ATTRIBUTE_LEVEL] := 'warning';
   RuleNode.Attributes['Case'] := 'Mixed';
   // A rule in another category node is not found
-  ProfileNode.AddChild('Lines').AddChild('BooleanComparison').Attributes[PROFILE_ATTRIBUTE_LEVEL] := 'Off';
+  ProfileNode.AddChild('Lines').AddChild('BooleanComparison').Attributes[PROFILE_ATTRIBUTE_LEVEL] :=
+      CODE_STYLE_LEVEL_NAMES[GetOtherLevel(BooleanComparisonRule.Info.Level)];
   // Unknown nodes and attributes are ignored
   ProfileNode.AddChild('Lines').AddChild('UnknownRule').Attributes['Value'] := '1';
   RuleNode.Attributes['UnknownOption'] := '1';
 
-  FProfile.RuleById('IndentStatements').Level := cslOff;
+  IndentStatementsRule.Level := GetOtherLevel(IndentStatementsRule.Info.Level);
   FProfile.ReadSettings(ProfileNode);
-  CheckEquals(Ord(cslHint), Ord(FProfile.RuleById('LineLength').Level), 'Invalid level');
-  CheckEquals(120, GetOption('LineLength', 'MaxLength').AsInteger, 'Integer out of range');
-  CheckTrue(GetOption('LineLength', 'IgnoreCommentLines').AsBoolean, 'Valid value is read');
-  CheckEquals('Exactly:1', GetOption('SpacesAssignment', 'SpacesBefore').Value, 'Count out of range');
+  CheckEquals(Ord(FProfile.RuleById('LineLength').Info.Level), Ord(FProfile.RuleById('LineLength').Level), 'Invalid level');
+  CheckEquals(GetOption('LineLength', 'MaxLength').DefaultValue, GetOption('LineLength', 'MaxLength').Value,
+      'Integer out of range');
+  CheckEquals(NewBoolean, GetOption('LineLength', 'IgnoreCommentLines').AsBoolean, 'Valid value is read');
+  CheckEquals(GetOption('SpacesAssignment', 'SpacesBefore').DefaultValue, GetOption('SpacesAssignment', 'SpacesBefore').Value,
+      'Count out of range');
   CheckEquals('AtMost:0', GetOption('SpacesAssignment', 'SpacesAfter').Value, 'Quantity ignores the case');
   CheckEquals(Ord(cslWarning), Ord(FProfile.RuleById('ReservedWordCase').Level), 'Level ignores the case');
-  CheckEquals('Lower', GetOption('ReservedWordCase', 'Case').Value, 'Unknown choice');
-  CheckEquals(Ord(cslHint), Ord(FProfile.RuleById('BooleanComparison').Level), 'Rule in a wrong category');
-  CheckEquals(Ord(cslHint), Ord(FProfile.RuleById('IndentStatements').Level), 'A missing rule node gives the default');
+  CheckEquals(GetOption('ReservedWordCase', 'Case').DefaultValue, GetOption('ReservedWordCase', 'Case').Value,
+      'Unknown choice');
+  CheckEquals(Ord(BooleanComparisonRule.Info.Level), Ord(BooleanComparisonRule.Level), 'Rule in a wrong category');
+  CheckEquals(Ord(IndentStatementsRule.Info.Level), Ord(IndentStatementsRule.Level),
+      'A missing rule node gives the default');
 end;
 
 procedure TestTCodeStyleProfile.TestProfileFile;
@@ -538,7 +638,7 @@ begin
     FProfile.SaveToFile(FileName);
     LoadedProfile.LoadFromFile(FileName);
     CheckProfilesEqual(FProfile, LoadedProfile, 'Loaded profile');
-    CheckEquals('My style', LoadedProfile.Name, 'Name of the loaded profile');
+    CheckEquals(TEST_PROFILE_NAME, LoadedProfile.Name, 'Name of the loaded profile');
 
     Document := LoadXMLDocument(FileName);
     CheckEquals(PROFILE_FILE_ROOT_NODE, Document.DocumentElement.NodeName, 'Root node');

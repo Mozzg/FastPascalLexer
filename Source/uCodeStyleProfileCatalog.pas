@@ -157,7 +157,7 @@ const
     (Id: 'Metrics'; Caption: 'Metrics')
   );
 
-  CODE_STYLE_RULES: array[0..210] of TCodeStyleRuleInfo = (
+  CODE_STYLE_RULES: array[0..212] of TCodeStyleRuleInfo = (
     // General
     (Category: 'General'; Id: 'Profile'; Caption: 'Profile name'; WithoutLevel: True;
         Description: 'Name of the profile. Save the profile to a file to share the style with other developers.'),
@@ -173,8 +173,6 @@ const
         Description: 'A line is longer than the limit.'),
     (Category: 'Lines'; Id: 'TrailingSpaces'; Caption: 'Trailing spaces'; Level: cslHint;
         Description: 'A line ends with spaces or tab characters.'),
-    (Category: 'Lines'; Id: 'IndentCharacters'; Caption: 'Characters used for indents';
-        Description: 'Which characters are used to indent the lines.'),
     (Category: 'Lines'; Id: 'TabsInsideLines'; Caption: 'Tab characters inside lines';
         Description: 'A line contains tab characters after its indent.'),
     (Category: 'Lines'; Id: 'LineEndings'; Caption: 'Line endings';
@@ -214,15 +212,15 @@ const
         Template: 'BlankLines';
         Description: 'How many blank lines surround a comment like { TMyClass } before the methods of a class.'),
     // Indentation
-    (Category: 'Indentation'; Id: 'BlockIndent'; Caption: 'Size of a block indent'; WithoutLevel: True;
-        Description: 'How many spaces one indent level has. The "Indent of..." rules count indents in these levels.'),
+    (Category: 'Indentation'; Id: 'BlockIndent'; Caption: 'Size and character of a block indent'; WithoutLevel: True;
+        Description: 'Which character indents consist of and how many of them one indent level has.'),
     (Category: 'Indentation'; Id: 'IndentStatements'; Caption: 'Indent of statements in begin-end'; Level: cslHint;
         Template: 'Indent';
         Description: 'How far the statements between begin and end are indented, relative to begin.'),
     (Category: 'Indentation'; Id: 'IndentBeginOfStatement'; Caption: 'Indent of begin after if, else and loops'; Level: cslHint;
         Template: 'Indent';
         Description: 'How far begin on its own line after if, else, for, while or with is indented, relative to the statement.'),
-    (Category: 'Indentation'; Id: 'IndentSingleStatement'; Caption: 'Indent of a statement after then, else, do'; Level: cslHint;
+    (Category: 'Indentation'; Id: 'IndentSingleStatement'; Caption: 'Indent of a statement after then, else or do'; Level: cslHint;
         Template: 'Indent';
         Description: 'How far a single statement on the line after then, else or do is indented, relative to the statement.'),
     (Category: 'Indentation'; Id: 'IndentTryBlocks'; Caption: 'Indent of statements in try blocks'; Level: cslHint;
@@ -238,7 +236,10 @@ const
         Description: 'How far the statement of a label on the next line is indented, relative to the label.'),
     (Category: 'Indentation'; Id: 'IndentCaseBegin'; Caption: 'Indent of begin under a case label'; Template: 'Indent';
         Description: 'How far begin on the line after a label is indented, relative to the label.'),
-    (Category: 'Indentation'; Id: 'IndentCaseElse'; Caption: 'Indent of statements in the else of case'; Level: cslHint;
+    (Category: 'Indentation'; Id: 'IndentCaseElse'; Caption: 'Indent of else of case'; Level: cslHint;
+        Template: 'Indent';
+        Description: 'How far the else of a case statement is indented, relative to case.'),
+    (Category: 'Indentation'; Id: 'IndentCaseElseStatements'; Caption: 'Indent of statements in the else of case'; Level: cslHint;
         Template: 'Indent';
         Description: 'How far the statements after the else of a case statement are indented, relative to else.'),
     (Category: 'Indentation'; Id: 'IndentAsm'; Caption: 'Indent of assembler instructions'; Template: 'Indent';
@@ -532,6 +533,8 @@ const
         Description: 'Whether a single statement is wrapped in begin-end.'),
     (Category: 'Statements'; Id: 'SemicolonBeforeEnd'; Caption: 'Semicolon before end';
         Description: 'Whether the last statement of a block ends with a semicolon.'),
+    (Category: 'Statements'; Id: 'EmptyParenthesesCalls'; Caption: 'Empty parentheses in calls without arguments';
+        Description: 'Whether a routine or method is called without arguments with empty parentheses: Run(); or Run;'),
     (Category: 'Statements'; Id: 'ElseAfterJump'; Caption: 'else after Exit, Break, Continue or raise';
         Description: 'An else branch follows a branch that ends with Exit, Break, Continue or raise: the else is not needed.'),
     (Category: 'Statements'; Id: 'InvertIf'; Caption: 'Short else after a long then';
@@ -555,6 +558,9 @@ const
         Description: 'Routines, classes or methods are implemented in another order than they are declared.'),
     (Category: 'Declarations'; Id: 'HeaderMatch'; Caption: 'Implementation headers repeat declarations';
         Description: 'What the header of an implementation repeats from the declaration.'),
+    (Category: 'Declarations'; Id: 'EmptyParenthesesDeclarations'; Caption: 'Empty parentheses in declarations without parameters';
+        Description: 'Whether a routine, method or procedural type without parameters is declared with empty parentheses:'
+        + ' procedure Run(); or procedure Run;'),
     (Category: 'Declarations'; Id: 'ClassComment'; Caption: 'Comment before the methods of a class';
         Description: 'The methods of a class are not preceded by a comment with the class name: { TMyClass }.'),
     (Category: 'Declarations'; Id: 'StandaloneRoutines'; Caption: 'Placement of standalone routines';
@@ -641,7 +647,7 @@ const
         Description: 'How many members a class declares.')
   );
 
-  CODE_STYLE_OPTIONS: array[0..242] of TCodeStyleOptionInfo = (
+  CODE_STYLE_OPTIONS: array[0..246] of TCodeStyleOptionInfo = (
     // Template: spaces around an operator or a punctuation mark
     (Rule: '@Spaces'; Name: 'SpacesBefore'; Caption: 'Spaces before'; Kind: cokQuantity; DefaultValue: 'Exactly:1';
         MinValue: 0; MaxValue: 10; Hint: 'Not checked at the start of a line'),
@@ -709,15 +715,15 @@ const
     (Rule: 'Columns'; Name: 'TabWidth'; Caption: 'Width of a tab character, spaces'; Kind: cokInteger;
         DefaultValue: '8'; MinValue: 1; MaxValue: 16),
     // Files and lines
-    (Rule: 'LineLength'; Name: 'MaxLength'; Caption: 'Maximum line length'; Kind: cokInteger; DefaultValue: '120';
+    (Rule: 'LineLength'; Name: 'MaxLength'; Caption: 'Maximum line length'; Kind: cokInteger; DefaultValue: '160';
         MinValue: 20; MaxValue: 1000),
     (Rule: 'LineLength'; Name: 'IgnoreCommentLines'; Caption: 'Do not check lines that hold only a comment';
         DefaultValue: CODE_STYLE_FALSE),
     (Rule: 'LineLength'; Name: 'IgnoreStringLines'; Caption: 'Do not check lines that end in a string literal';
         DefaultValue: CODE_STYLE_FALSE),
+    (Rule: 'LineLength'; Name: 'IgnoreEndOfLineComment'; Caption: 'Do not count comments at the end of line';
+        DefaultValue: CODE_STYLE_FALSE),
     (Rule: 'TrailingSpaces'; Name: 'CheckBlankLines'; Caption: 'Also lines of spaces only'; DefaultValue: CODE_STYLE_TRUE),
-    (Rule: 'IndentCharacters'; Name: 'IndentWith'; Caption: 'Lines are indented with'; Kind: cokChoice;
-        DefaultValue: 'Spaces'; Choices: 'Spaces=Spaces|Tabs=Tab characters|Consistent=Either, but the same in a file'),
     (Rule: 'TabsInsideLines'; Name: 'AllowInComments'; Caption: 'Allow in comments'; DefaultValue: CODE_STYLE_TRUE),
     (Rule: 'TabsInsideLines'; Name: 'AllowInStrings'; Caption: 'Allow in string literals'; DefaultValue: CODE_STYLE_TRUE),
     (Rule: 'LineEndings'; Name: 'Style'; Caption: 'Line break'; Kind: cokChoice; DefaultValue: 'CRLF';
@@ -743,15 +749,17 @@ const
         Kind: cokQuantity; DefaultValue: 'Exactly:0'; MinValue: 0; MaxValue: 10),
     (Rule: 'BlankLinesInsideBlocks'; Name: 'BeforeEnd'; Caption: 'Blank lines before the end of a block';
         Kind: cokQuantity; DefaultValue: 'Exactly:0'; MinValue: 0; MaxValue: 10),
-    (Rule: 'BlankLinesInsideBlocks'; Name: 'IgnoreNestedRoutines'; Caption: 'Do not check before a nested routine';
+    (Rule: 'BlankLinesInsideBlocks'; Name: 'IgnoreNestedRoutines'; Caption: 'Do not check around a nested routine';
         DefaultValue: CODE_STYLE_TRUE),
     (Rule: 'BlankLinesBetweenTypes'; Name: 'LinesBetween'; Caption: 'Blank lines between'; Kind: cokQuantity;
-        DefaultValue: 'AtLeast:1'; MinValue: 0; MaxValue: 10),
+        DefaultValue: 'Exactly:1'; MinValue: 0; MaxValue: 10),
     (Rule: 'BlankLinesBetweenRoutines'; Name: 'LinesBetween'; Caption: 'Blank lines between'; Kind: cokQuantity;
-        DefaultValue: 'AtLeast:1'; MinValue: 0; MaxValue: 10),
+        DefaultValue: 'Exactly:1'; MinValue: 0; MaxValue: 10),
     // Indentation
-    (Rule: 'BlockIndent'; Name: 'Size'; Caption: 'Size of a block indent, spaces'; Kind: cokInteger; DefaultValue: '2';
-        MinValue: 1; MaxValue: 16),
+    (Rule: 'BlockIndent'; Name: 'IndentWith'; Caption: 'Characters used for indents'; Kind: cokChoice;
+        DefaultValue: 'Spaces'; Choices: 'Spaces=Spaces|Tabs=Tab characters'),
+    (Rule: 'BlockIndent'; Name: 'Size'; Caption: 'Number of indent characters in one indent'; Kind: cokInteger;
+        DefaultValue: '2'; MinValue: 1; MaxValue: 16),
     (Rule: 'LayoutWords'; Name: 'Words'; Caption: 'Layout words'; Kind: cokTextList;
         DefaultValue: 'program;library;package;unit;interface;implementation;uses;contains;requires;exports;'
         + 'initialization;finalization;end.'),
@@ -767,6 +775,8 @@ const
         Choices: 'FirstColumn=At the start of the line|Code=At the indent of the code|Outdented=One level left of the code'
         + '|Any=Any'),
     // Spaces around operators
+    (Rule: 'SpacesColonDeclaration'; Name: 'SpacesColonAfter'; Caption: 'Allow more spaces after it to align consecutive lines';
+        DefaultValue: CODE_STYLE_FALSE),
     (Rule: 'SpacesWordOperators'; Name: 'SpacesBefore'; Caption: 'Spaces before, next to a word'; Kind: cokQuantity;
         DefaultValue: 'Exactly:1'; MinValue: 1; MaxValue: 10; Hint: 'Not checked at the start of a line'),
     (Rule: 'SpacesWordOperators'; Name: 'SpacesAfter'; Caption: 'Spaces after, next to a word'; Kind: cokQuantity;
@@ -843,8 +853,8 @@ const
     (Rule: 'AnonymousMethodLayout'; Name: 'ClosingParenthesis'; Caption: 'Closing parenthesis of the call';
         Kind: cokChoice; DefaultValue: 'Any'; Choices: CHOICES_CLOSING),
     // Wrapping of long lines
-    (Rule: 'ContinuationIndent'; Name: 'Size'; Caption: 'Continuation indent, spaces'; Kind: cokInteger;
-        DefaultValue: '4'; MinValue: 1; MaxValue: 16),
+    (Rule: 'ContinuationIndent'; Name: 'Size'; Caption: 'Indent, in block indents'; Kind: cokInteger;
+        DefaultValue: '2'; MinValue: 0; MaxValue: 6),
     (Rule: 'ContinuationIndent'; Name: 'Mode'; Caption: 'Continuation lines are'; Kind: cokChoice;
         DefaultValue: 'Either';
         Choices: 'Fixed=Indented by the continuation indent|Aligned=Aligned with the opening bracket'
@@ -864,14 +874,16 @@ const
     (Rule: 'WrappedHeaders'; Name: 'Allowed'; Caption: 'Headers may be wrapped'; DefaultValue: CODE_STYLE_TRUE),
     (Rule: 'WrappedHeaders'; Name: 'BreakBetweenParameters'; Caption: 'Breaks only between parameters';
         DefaultValue: CODE_STYLE_FALSE),
-    (Rule: 'WrappedHeaders'; Name: 'OneParameterPerLine'; Caption: 'One parameter per line when wrapped';
-        DefaultValue: CODE_STYLE_FALSE),
     (Rule: 'WrappedHeaders'; Name: 'MaxLines'; Caption: 'Lines of a header, at most'; Kind: cokInteger;
+        DefaultValue: '0'; MinValue: 0; MaxValue: 20; Hint: '0: no limit'),
+    (Rule: 'WrappedHeaders'; Name: 'WrappedParametersPerLine'; Caption: 'Parameters per line'; Kind: cokInteger;
         DefaultValue: '0'; MinValue: 0; MaxValue: 20; Hint: '0: no limit'),
     (Rule: 'WrappedArguments'; Name: 'OneArgumentPerLine'; Caption: 'One argument per line when wrapped';
         DefaultValue: CODE_STYLE_FALSE),
     (Rule: 'WrappedArguments'; Name: 'ClosingParenthesis'; Caption: 'Closing parenthesis'; Kind: cokChoice;
         DefaultValue: 'Any'; Choices: CHOICES_CLOSING),
+    (Rule: 'WrappedVariableLists'; Name: 'WrappedVariables'; Caption: 'Instead of wrapping, declare each line with its own type';
+        DefaultValue: CODE_STYLE_TRUE),
     // Case of keywords and literals
     (Rule: 'ReservedWordCase'; Name: 'Case'; Caption: 'Reserved words are written'; Kind: cokChoice;
         DefaultValue: 'Lower'; Choices: CHOICES_WORD_CASE),
@@ -954,10 +966,6 @@ const
     (Rule: 'PropertyAccessors'; Name: 'FieldMatchesProperty'; Caption: 'Field named after its property, with the field prefix';
         DefaultValue: CODE_STYLE_TRUE; Hint: 'The prefix is taken from the field naming rules: FText, m_Text or Text for Text'),
     // Naming: variables, constants and units
-    (Rule: 'NamesGlobalConstants'; Name: 'IncludeTypedConstants'; Caption: 'Also typed constants';
-        DefaultValue: CODE_STYLE_FALSE; Hint: 'Off: typed constants are checked only by Names of typed constants'),
-    (Rule: 'NamesUnits'; Name: 'CheckEachPart'; Caption: 'Check every part of a dotted name';
-        DefaultValue: CODE_STYLE_TRUE),
     (Rule: 'FormUnitNames'; Name: 'Format'; Caption: 'Unit name, %s is the class name without its prefix';
         Kind: cokText; DefaultValue: '%s'; Hint: 'Like u%s: the unit of TfmMain is ufmMain when the prefix is T'),
     (Rule: 'FormUnitNames'; Name: 'ClassPrefix'; Caption: 'Prefix dropped from the class name'; Kind: cokText;
@@ -975,6 +983,8 @@ const
         DefaultValue: 'Any'; Choices: CHOICES_REQUIRED),
     (Rule: 'SemicolonBeforeEnd'; Name: 'Semicolon'; Caption: 'Semicolon before end'; Kind: cokChoice;
         DefaultValue: 'Required'; Choices: CHOICES_REQUIRED),
+    (Rule: 'EmptyParenthesesCalls'; Name: 'Parentheses'; Caption: 'Empty parentheses: Run()'; Kind: cokChoice;
+        DefaultValue: 'Forbidden'; Choices: CHOICES_REQUIRED),
     (Rule: 'InvertIf'; Name: 'MinThenLines'; Caption: 'then branch of at least, lines'; Kind: cokInteger;
         DefaultValue: '10'; MinValue: 2; MaxValue: 200),
     (Rule: 'InvertIf'; Name: 'MaxElseLines'; Caption: 'else branch of at most, lines'; Kind: cokInteger;
@@ -1006,12 +1016,15 @@ const
         DefaultValue: CODE_STYLE_TRUE),
     (Rule: 'ImplementationOrder'; Name: 'CheckRoutines'; Caption: 'Routines'; DefaultValue: CODE_STYLE_TRUE),
     (Rule: 'ImplementationOrder'; Name: 'CheckClasses'; Caption: 'Classes'; DefaultValue: CODE_STYLE_TRUE),
-    (Rule: 'ImplementationOrder'; Name: 'CheckMethods'; Caption: 'Methods of every class'; DefaultValue: CODE_STYLE_TRUE),
+    (Rule: 'ImplementationOrder'; Name: 'CheckMethods'; Caption: 'Methods of classes'; DefaultValue: CODE_STYLE_TRUE),
+    (Rule: 'ImplementationOrder'; Name: 'CheckRecordMethods'; Caption: 'Methods of records'; DefaultValue: CODE_STYLE_TRUE),
     (Rule: 'HeaderMatch'; Name: 'Parameters'; Caption: 'The parameters'; DefaultValue: CODE_STYLE_TRUE),
     (Rule: 'HeaderMatch'; Name: 'DefaultValues'; Caption: 'The default values of the parameters';
         DefaultValue: CODE_STYLE_FALSE),
     (Rule: 'HeaderMatch'; Name: 'Directives'; Caption: 'The directives (overload, stdcall...)';
         DefaultValue: CODE_STYLE_FALSE),
+    (Rule: 'EmptyParenthesesDeclarations'; Name: 'Parentheses'; Caption: 'Empty parentheses: procedure Run()';
+        Kind: cokChoice; DefaultValue: 'Forbidden'; Choices: CHOICES_REQUIRED),
     (Rule: 'ClassComment'; Name: 'Format'; Caption: 'Comment, %s is the class name'; Kind: cokText;
         DefaultValue: '{ %s }'),
     (Rule: 'StandaloneRoutines'; Name: 'Placement'; Caption: 'Standalone routines are placed'; Kind: cokChoice;
@@ -1025,8 +1038,8 @@ const
     (Rule: 'GlobalVariables'; Name: 'AllowFormVariables'; Caption: 'Allow the variables of auto-created forms';
         DefaultValue: CODE_STYLE_TRUE),
     (Rule: 'GlobalVariables'; Name: 'AllowedNames'; Caption: 'Allowed variables'; Kind: cokTextList; DefaultValue: ''),
-    (Rule: 'GlobalVariables'; Name: 'CheckImplementation'; Caption: 'Also variables of the implementation section';
-        DefaultValue: CODE_STYLE_FALSE),
+    (Rule: 'GlobalVariables'; Name: 'AllowImplementation'; Caption: 'Allow variables of the implementation section';
+        DefaultValue: CODE_STYLE_TRUE),
     (Rule: 'ForwardDeclarations'; Name: 'Allowed'; Caption: 'Allow forward declarations'; DefaultValue: CODE_STYLE_TRUE),
     (Rule: 'ForwardDeclarations'; Name: 'AtTop'; Caption: 'Forward declarations at the top of the type section';
         DefaultValue: CODE_STYLE_TRUE),
@@ -1084,7 +1097,7 @@ const
         DefaultValue: 'AtLeast:1'; MinValue: 0; MaxValue: 20),
     (Rule: 'DeclarationComments'; Name: 'Required'; Caption: 'Declarations that need a comment'; Kind: cokChoice;
         DefaultValue: 'None';
-        Choices: 'None=None|Public=Public and published members and routines|Protected=Also protected members'
+        Choices: 'None=None|Public=Public and published members and routines|Protected=Protected, public and published members and routines'
         + '|All=All members and routines'),
     (Rule: 'DeclarationComments'; Name: 'Style'; Caption: 'Style of the comments'; Kind: cokChoice;
         DefaultValue: 'Any'; Choices: 'Line=A comment above the declaration|XmlDoc=/// XML documentation|Any=Any'),
@@ -1143,7 +1156,7 @@ const
         DefaultValue: '50'; MinValue: 5; MaxValue: 1000)
   );
 
-  CODE_STYLE_DEFAULTS: array[0..67] of TCodeStyleDefaultInfo = (
+  CODE_STYLE_DEFAULTS: array[0..69] of TCodeStyleDefaultInfo = (
     // Blank lines
     (Rule: 'BlankLinesNestedRoutines'; Option: 'LinesBefore'; Value: 'Exactly:1'),
     (Rule: 'BlankLinesNestedRoutines'; Option: 'LinesAfter'; Value: 'Exactly:1'),
@@ -1152,6 +1165,8 @@ const
     (Rule: 'BlankLinesClassComment'; Option: 'LinesBefore'; Value: 'Exactly:1'),
     (Rule: 'BlankLinesClassComment'; Option: 'LinesAfter'; Value: 'Exactly:1'),
     // Indentation
+    (Rule: 'IndentCaseBegin'; Option: 'Indent'; Value: '0'),
+    (Rule: 'IndentCaseElse'; Option: 'Indent'; Value: '0'),
     (Rule: 'IndentBeginOfStatement'; Option: 'Indent'; Value: '0'),
     (Rule: 'IndentRoutineBody'; Option: 'Indent'; Value: '0'),
     (Rule: 'IndentLocalSections'; Option: 'Indent'; Value: '0'),
@@ -1166,8 +1181,8 @@ const
     (Rule: 'SpacesDereference'; Option: 'SpacesAfter'; Value: 'Any'),
     (Rule: 'SpacesPointerType'; Option: 'SpacesBefore'; Value: 'Any'),
     (Rule: 'SpacesPointerType'; Option: 'SpacesAfter'; Value: 'Exactly:0'),
-    (Rule: 'SpacesRange'; Option: 'SpacesBefore'; Value: 'Exactly:0'),
-    (Rule: 'SpacesRange'; Option: 'SpacesAfter'; Value: 'Exactly:0'),
+    (Rule: 'SpacesRange'; Option: 'SpacesBefore'; Value: 'AtMost:1'),
+    (Rule: 'SpacesRange'; Option: 'SpacesAfter'; Value: 'AtMost:1'),
     (Rule: 'SpacesDot'; Option: 'SpacesBefore'; Value: 'Exactly:0'),
     (Rule: 'SpacesDot'; Option: 'SpacesAfter'; Value: 'Exactly:0'),
     // Spaces around punctuation and brackets

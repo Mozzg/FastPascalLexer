@@ -138,7 +138,7 @@ colon of declarations...), naming per kind of identifier (classes, interfaces, p
 parameters, local constants...), indents per construct (statements of begin-end, case labels,
 visibility sections...), blank lines per construct.
 
-- The catalog (`uCodeStyleProfileCatalog.pas`) lists 19 categories and 211 rules. Option kinds:
+- The catalog (`uCodeStyleProfileCatalog.pas`) lists categories and rules. Option kinds:
   a check box, a number, a text, a list (one item per line), a choice and a count condition: Any,
   Exactly N, At least N or At most N (for example 1 space before `:=` and none after it, or at
   least 1 blank line between routines).
@@ -158,7 +158,7 @@ visibility sections...), blank lines per construct.
   `Item.Name`).
 - Every identifier is checked by one naming rule: the specific kinds (exception classes, forms,
   class var fields, typed constants...) have rules of their own, the general rules leave them out
-  unless their check box ("Also class var fields", "Also typed constants") includes them.
+  unless their check box (like "Also class var fields") includes them.
 - Some gaps are governed by two rules: the space between `:=` and a unary minus (`:= -1`: the
   spaces after `:=` and before the unary minus), the blank line between `interface` and `uses`
   (blank lines around unit sections and around uses clauses). Then both rules must be satisfied;
@@ -219,7 +219,7 @@ start of the IDE. The Debug configuration runs `bds.exe -pDelphi` as the host ap
 
 ## Moving the feature to DICE
 
-1. Copy `Source\uCodeStyle*.pas` (11 units) to `DICE\Source\` and
+1. Copy `Source\uCodeStyle*.pas` to `DICE\Source\` and
    `Source\Forms\ufmCodeStyleProfile.pas/.dfm` to `DICE\Source\Forms\`.
 2. Make the parser units available to DICE: `uPasLexer`, `uPasLexerTypes`, `uPasExceptions`,
    `uPasParser`, `uPasParserTypes`, `uPasParserGrammar` from `Source\` of FastPascalLexer
@@ -229,11 +229,12 @@ start of the IDE. The Debug configuration runs `bds.exe -pDelphi` as the host ap
    and `uCodeStyleFeature` must be in the project: their `initialization` sections register the
    rules and the feature.
 4. Nothing else changes: of the framework the feature uses only `uBaseFeature`,
-   `uFeatureCollection`, `uWizardLog` and `ufmWizardSettings` (its public part). The copies of
-   `uBaseFeature`, `uFeatureCollection` and `uWizardLog` in `Source\` are identical to DICE commit
-   `5c8be6b` (only a header comment is added); the copy of `ufmWizardSettings` lacks only the form
-   icon. Do not copy the framework units back to DICE. The settings go to the `TCodeStyleFeature`
-   node of `DICE.xml`.
+   `uFeatureCollection`, `uWizardLog`, `uWizardConsts` (`WIZARD_NAME`) and `ufmWizardSettings` (its
+   public part). The copies of `uBaseFeature`, `uFeatureCollection` and `uWizardLog` in `Source\`
+   are identical to DICE commit `5c8be6b` (only a header comment is added); the copy of
+   `ufmWizardSettings` lacks only the form icon; the copy of `uWizardConsts` has other values, in
+   DICE the feature gets the DICE ones. Do not copy the framework units back to DICE. The settings
+   go to the `TCodeStyleFeature` node of `DICE.xml`.
 5. Remove the test plugin from the `Experts` key, otherwise both check the code.
 
 ## Updating the framework copy from DICE
